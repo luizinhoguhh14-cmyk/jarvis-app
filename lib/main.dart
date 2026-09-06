@@ -51,6 +51,7 @@ class _NavegacaoPrincipalState extends State<NavegacaoPrincipal> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+  resizeToAvoidBottomInset: false,
       body: telas[indiceAtual],
       bottomNavigationBar: BottomNavigationBar(
         backgroundColor: const Color(0xFF09090B),
@@ -409,6 +410,7 @@ class _TelaRadarMapsState extends State<TelaRadarMaps> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+  resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           GoogleMap(
