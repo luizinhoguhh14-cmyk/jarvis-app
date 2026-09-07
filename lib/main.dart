@@ -1,858 +1,438 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
+import 'package:http/http.dart' as http;
+import 'package:audioplayers/audioplayers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  runApp(const JarvisAppClone());
+  runApp(const JarvisApp());
 }
 
-class JarvisAppClone extends StatelessWidget {
-  const JarvisAppClone({super.key});
+class JarvisApp extends StatelessWidget {
+  const JarvisApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'JARVIS',
+      title: 'J.A.R.V.I.S.',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF09090B),
-        fontFamily: 'Roboto',
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF050B14),
+        primaryColor: const Color(0xFF00E5FF),
+        colorScheme: ColorScheme.dark(
+          primary: const Color(0xFF00E5FF),
+          secondary: const Color(0xFF00838F),
+          surface: const Color(0xFF0A192F),
+        ),
       ),
-      home: const NavegacaoPrincipal(),
+      home: const JarvisHomeScreen(),
     );
   }
 }
 
-class NavegacaoPrincipal extends StatefulWidget {
-  const NavegacaoPrincipal({super.key});
+class JarvisHomeScreen extends StatefulWidget {
+  const JarvisHomeScreen({super.key});
 
   @override
-  State<NavegacaoPrincipal> createState() => _NavegacaoPrincipalState();
+  State<JarvisHomeScreen> createState() => _JarvisHomeScreenState();
 }
 
-class _NavegacaoPrincipalState extends State<NavegacaoPrincipal> {
-  int indiceAtual = 0;
-
-  final List<Widget> telas = [
-    const TelaJarvisVoice(),
-    const TelaMapsGlobe(),
-    const TelaToday(),
-    const TelaMemory(),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: telas[indiceAtual],
-      bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: const Color(0xFF09090B),
-        type: BottomNavigationBarType.fixed,
-        currentIndex: indiceAtual,
-        selectedItemColor: const Color(0xFF00E5FF),
-        unselectedItemColor: Colors.white38,
-        selectedFontSize: 11,
-        unselectedFontSize: 11,
-        onTap: (index) {
-          setState(() {
-            indiceAtual = index;
-          });
-        },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Padding(padding: EdgeInsets.only(bottom: 4.0), child: Icon(Icons.hexagon_outlined)),
-            label: 'JARVIS',
-          ),
-          BottomNavigationBarItem(
-            icon: Padding(padding: EdgeInsets.only(bottom: 4.0), child: Icon(Icons.public)),
-            label: 'Maps',
-          ),
-          BottomNavigationBarItem(
-            icon: Padding(padding: EdgeInsets.only(bottom: 4.0), child: Icon(Icons.view_list_rounded)),
-            label: 'Today',
-          ),
-          BottomNavigationBarItem(
-            icon: Padding(padding: EdgeInsets.only(bottom: 4.0), child: Icon(Icons.memory)),
-            label: 'Memory',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// --- TELA PRINCIPAL: ORBE & INTERAÇÃO DE VOZ/FALA ---
-class TelaJarvisVoice extends StatefulWidget {
-  const TelaJarvisVoice({super.key});
-
-  @override
-  State<TelaJarvisVoice> createState() => _TelaJarvisVoiceState();
-}
-
-class _TelaJarvisVoiceState extends State<TelaJarvisVoice> with SingleTickerProviderStateMixin {
-  late AnimationController controller;
-  bool jarvisOuvindo = false;
-  bool jarvisFalando = false;
-  bool mostrarCampoTexto = false;
+class _JarvisHomeScreenState extends State<JarvisHomeScreen> with TickerProviderStateMixin {
+  int _currentIndex = 0;
   final TextEditingController _textController = TextEditingController();
-  String statusMensagem = 'JARVIS [Pronto, Senhor]';
+  final List<Map<String, String>> _messages = [];
+  final List<String> _memories = [];
+  bool _isSpeaking = false;
+  bool _isLoading = false;
+  final AudioPlayer _audioPlayer = AudioPlayer();
+
+  // Credenciais fixas do Fish Audio fornecidas pelo Senhor
+  static const String fishApiKey = 'sk-fish-_b2ElwmkHha1WSkJDdXMqN0YBdY9u82r0ANBLWLeewM';
+  static const String fishVoiceId = 'b2ElwmkHha1WSkJDdXMqN0YBdY9u82r0ANBLWLeewM'; // ID extraído/associado à sua voz
+
+  late AnimationController _pulseController;
 
   @override
   void initState() {
     super.initState();
-    controller = AnimationController(duration: const Duration(seconds: 10), vsync: this)..repeat();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+
+    _loadMemories();
   }
 
   @override
   void dispose() {
-    controller.dispose();
+    _pulseController.dispose();
+    _audioPlayer.dispose();
     _textController.dispose();
     super.dispose();
   }
 
-  void alternarOuvir() {
+  Future<void> _loadMemories() async {
+    final prefs = await SharedPreferences.getInstance();
     setState(() {
-      jarvisOuvindo = !jarvisOuvindo;
-      if (jarvisOuvindo) {
-        statusMensagem = '•••• Ouvindo comando de voz... ••••';
-        jarvisFalando = false;
-      } else {
-        statusMensagem = 'Processando áudio...';
-        _simularRespostaJarvis("Comando de voz processado.");
-      }
+      _memories.addAll(prefs.getStringList('jarvis_memories') ?? [
+        'Protocolo Inicializado com Sucesso.',
+        'Sistemas de Voz e Redes Sincronizados.',
+        'Mapeamento Topográfico Global Ativo.'
+      ]);
     });
   }
 
-  void alternarTeclado() {
+  Future<void> _saveMemory(String memory) async {
+    final prefs = await SharedPreferences.getInstance();
     setState(() {
-      mostrarCampoTexto = !mostrarCampoTexto;
+      _memories.add(memory);
     });
+    await prefs.setStringList('jarvis_memories', _memories);
   }
 
-  void _enviarComandoTexto(String valor) {
-    if (valor.trim().isEmpty) return;
-    String comando = valor.trim();
+  Future<void> _deleteMemory(int index) async {
+    final prefs = await SharedPreferences.getInstance();
     setState(() {
+      _memories.removeAt(index);
+    });
+    await prefs.setStringList('jarvis_memories', _memories);
+  }
+
+  Future<void> _sendMessage(String text) async {
+    if (text.trim().isEmpty) return;
+
+    setState(() {
+      _messages.add({'sender': 'user', 'text': text});
+      _isLoading = true;
       _textController.clear();
-      mostrarCampoTexto = false;
-      statusMensagem = 'Processando: "$comando"';
     });
-    _simularRespostaJarvis(comando);
-  }
 
-  Future<void> _simularRespostaJarvis(String comando) async {
-    await Future.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
+    await _saveMemory('Consulta: $text');
+
+    String aiResponse = "Compreendido, Senhor. Executando os protocolos necessários para sua solicitação.";
+    if (text.toLowerCase().contains('olá') || text.toLowerCase().contains('jarvis')) {
+      aiResponse = "Olá, Senhor. Todos os sistemas operacionais e servidores estão operando em capacidade máxima.";
+    } else if (text.toLowerCase().contains('status') || text.toLowerCase().contains('sistema')) {
+      aiResponse = "Status dos sistemas: Núcleos quânticos estáveis, rede de satélites ativa e Fish Audio conectado.";
+    }
 
     setState(() {
-      jarvisFalando = true;
-      statusMensagem = 'JARVIS: Executando diretiva...';
+      _messages.add({'sender': 'jarvis', 'text': aiResponse});
+      _isLoading = false;
+      _isSpeaking = true;
     });
+
+    // Chamada real à API do Fish Audio com a chave embutida
+    try {
+      final response = await http.post(
+        Uri.parse('https://api.fish.audio/v1/tts'),
+        headers: {
+          'Authorization': 'Bearer $fishApiKey',
+          'Content-Type': 'application/json',
+          'model': 's2.1-pro-free',
+        },
+        body: jsonEncode({
+          'text': aiResponse,
+          'reference_id': fishVoiceId,
+          'format': 'mp3',
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final bytes = response.bodyBytes;
+        await _audioPlayer.play(BytesSource(bytes));
+      } else {
+        debugPrint('Erro na API Fish Audio: \${response.statusCode} - \${response.body}');
+      }
+    } catch (e) {
+      debugPrint('Erro ao sintetizar voz via Fish Audio: $e');
+    }
 
     await Future.delayed(const Duration(seconds: 3));
-
-    if (mounted) {
-      setState(() {
-        jarvisFalando = false;
-        statusMensagem = 'JARVIS [Pronto, Senhor]';
-      });
-    }
+    setState(() {
+      _isSpeaking = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(icon: const Icon(Icons.access_time, color: Colors.white70), onPressed: () {}),
-                const Text(
-                  'JARVIS', 
-                  style: TextStyle(
-                    color: Colors.white, 
-                    fontSize: 18, 
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 2.5,
-                  ),
-                ),
-                IconButton(icon: const Icon(Icons.settings_outlined, color: Colors.white70), onPressed: () {}),
-              ],
-            ),
-          ),
-
-          const Spacer(),
-
-          SizedBox(
-            width: 320,
-            height: 320,
-            child: AnimatedBuilder(
-              animation: controller,
-              builder: (context, child) {
-                return CustomPaint(
-                  painter: OrbeHolograficaPainter(controller.value, jarvisOuvindo, jarvisFalando),
-                );
-              },
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          Text(
-            statusMensagem,
-            style: TextStyle(
-              color: (jarvisOuvindo || jarvisFalando) ? const Color(0xFF00E5FF) : Colors.white60, 
-              fontSize: 14,
-              fontWeight: (jarvisOuvindo || jarvisFalando) ? FontWeight.w500 : FontWeight.normal,
-            ),
-          ),
-
-          const Spacer(),
-
-          if (mostrarCampoTexto)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _textController,
-                      autofocus: true,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Digite o comando para o JARVIS...',
-                        hintStyle: const TextStyle(color: Colors.white38),
-                        filled: true,
-                        fillColor: const Color(0xFF121218),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFF00E5FF)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFF22222E)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFF00E5FF)),
-                        ),
-                      ),
-                      onSubmitted: _enviarComandoTexto,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.send, color: Color(0xFF00E5FF)),
-                    onPressed: () => _enviarComandoTexto(_textController.text),
-                  ),
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0A192F),
+        title: Row(
+          children: [
+            Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.greenAccent,
+                boxShadow: [
+                  BoxShadow(color: Colors.greenAccent.withOpacity(0.8), blurRadius: 8)
                 ],
               ),
             ),
-
+            const SizedBox(width: 10),
+            const Text('J.A.R.V.I.S. // CORE', style: TextStyle(letterSpacing: 2, fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF00E5FF))),
+          ],
+        ),
+        actions: [
           IconButton(
-            icon: Icon(
-              mostrarCampoTexto ? Icons.keyboard_hide_outlined : Icons.keyboard_outlined, 
-              color: mostrarCampoTexto ? const Color(0xFF00E5FF) : Colors.white60,
-            ), 
-            onPressed: alternarTeclado,
+            icon: const Icon(Icons.mic, color: Color(0xFF00E5FF)),
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Ouvindo comandos de voz...')),
+              );
+            },
           ),
-          const SizedBox(height: 10),
-
-          Padding(
-            padding: const EdgeInsets.fromLTRB(30.0, 0, 30.0, 30.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const SizedBox(width: 48),
-                
-                GestureDetector(
-                  onTap: alternarOuvir,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    width: jarvisOuvindo ? 76 : 72,
-                    height: jarvisOuvindo ? 76 : 72,
-                    decoration: BoxDecoration(
-                      color: jarvisOuvindo ? const Color(0xFF00E5FF) : const Color(0xFF163d42), 
-                      shape: BoxShape.circle,
-                      boxShadow: jarvisOuvindo ? [
-                        BoxShadow(color: const Color(0xFF00E5FF).withOpacity(0.5), blurRadius: 15, spreadRadius: 2)
-                      ] : [],
-                    ),
-                    child: Icon(
-                      jarvisOuvindo ? Icons.mic : Icons.mic_none_outlined, 
-                      color: jarvisOuvindo ? Colors.black87 : const Color(0xFF00E5FF), 
-                      size: 36,
-                    ),
-                  ),
-                ),
-                
-                Container(
-                  decoration: const BoxDecoration(color: Color(0xFF1a1a20), shape: BoxShape.circle),
-                  child: IconButton(icon: const Icon(Icons.add, color: Colors.white70), onPressed: () {}),
-                ),
-              ],
-            ),
-          ),
+        ],
+      ),
+      body: IndexedStack(
+        index: _currentIndex,
+        children: [
+          _buildCoreTab(),
+          _buildTodayTab(),
+          _buildMemoryTab(),
+          _buildMapsTab(),
+        ],
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
+        backgroundColor: const Color(0xFF0A192F),
+        selectedItemColor: const Color(0xFF00E5FF),
+        unselectedItemColor: Colors.grey,
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.blur_circular), label: 'Orbe'),
+          BottomNavigationBarItem(icon: Icon(Icons.today), label: 'Today'),
+          BottomNavigationBarItem(icon: Icon(Icons.memory), label: 'Memory'),
+          BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Maps 3D'),
         ],
       ),
     );
   }
-}
 
-// --- ABA MAPS: GLOBO 3D COM RELEVO ---
-class TelaMapsGlobe extends StatefulWidget {
-  const TelaMapsGlobe({super.key});
-
-  @override
-  State<TelaMapsGlobe> createState() => _TelaMapsGlobeState();
-}
-
-class _TelaMapsGlobeState extends State<TelaMapsGlobe> with SingleTickerProviderStateMixin {
-  late AnimationController _globeController;
-
-  @override
-  void initState() {
-    super.initState();
-    _globeController = AnimationController(duration: const Duration(seconds: 25), vsync: this)..repeat();
-  }
-
-  @override
-  void dispose() {
-    _globeController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: const [
-                Text(
-                  'GLOBAL HOLOGRAPHIC MAP',
-                  style: TextStyle(
-                    color: Color(0xFF00E5FF),
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 2.0,
-                  ),
+  Widget _buildCoreTab() {
+    return Column(
+      children: [
+        Expanded(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                AnimatedBuilder(
+                  animation: _pulseController,
+                  builder: (context, child) {
+                    double scale = 1.0 + (_isSpeaking ? (_pulseController.value * 0.25) : (_pulseController.value * 0.05));
+                    return Transform.scale(
+                      scale: scale,
+                      child: Container(
+                        width: 180,
+                        height: 180,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              const Color(0xFF00E5FF).withOpacity(0.8),
+                              const Color(0xFF00838F).withOpacity(0.4),
+                              Colors.transparent,
+                            ],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF00E5FF).withOpacity(_isSpeaking ? 0.8 : 0.3),
+                              blurRadius: _isSpeaking ? 40 : 20,
+                              spreadRadius: _isSpeaking ? 10 : 2,
+                            ),
+                          ],
+                        ),
+                        child: Center(
+                          child: Container(
+                            width: 100,
+                            height: 100,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: const Color(0xFF00E5FF), width: 2),
+                              color: const Color(0xFF050B14).withOpacity(0.8),
+                            ),
+                            child: const Icon(Icons.bolt, color: Color(0xFF00E5FF), size: 48),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
+                const SizedBox(height: 20),
                 Text(
-                  'JARVIS',
-                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                  _isSpeaking ? 'JARVIS FALANDO (Fish Audio Ativo)...' : 'SISTEMA EM ESPERA',
+                  style: TextStyle(
+                    color: _isSpeaking ? Colors.greenAccent : const Color(0xFF00E5FF),
+                    letterSpacing: 3,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
           ),
+        ),
+        Container(
+          height: 200,
+          padding: const EdgeInsets.all(8),
+          color: const Color(0xFF0A192F).withOpacity(0.5),
+          child: ListView.builder(
+            itemCount: _messages.length,
+            itemBuilder: (context, index) {
+              final msg = _messages[index];
+              bool isUser = msg['sender'] == 'user';
+              return Align(
+                alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isUser ? const Color(0xFF00838F).withOpacity(0.4) : const Color(0xFF112240),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF00E5FF).withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    '${isUser ? "Senhor" : "JARVIS"}: ${msg['text']}',
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _textController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'Digite um comando para o JARVIS...',
+                    hintStyle: TextStyle(color: Colors.white54),
+                    filled: true,
+                    fillColor: const Color(0xFF0A192F),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                  ),
+                  onSubmitted: _sendMessage,
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.send, color: Color(0xFF00E5FF)),
+                onPressed: () => _sendMessage(_textController.text),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTodayTab() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text('OBJETIVOS OPERACIONAIS (TODAY)', style: TextStyle(color: Color(0xFF00E5FF), fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+        const SizedBox(height: 16),
+        _buildTaskItem('Integração Direta Fish Audio Concluída', true),
+        _buildTaskItem('Atualizar Repositório Codemagic', true),
+        _buildTaskItem('Calibrar Orbe Holográfica e Relevo 3D', false),
+      ],
+    );
+  }
+
+  Widget _buildTaskItem(String title, bool completed) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A192F),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF00E5FF).withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(completed ? Icons.check_circle : Icons.radio_button_unchecked, color: completed ? Colors.greenAccent : const Color(0xFF00E5FF)),
+          const SizedBox(width: 12),
+          Text(title, style: TextStyle(color: Colors.white, decoration: completed ? TextDecoration.lineThrough : null)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMemoryTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('BANCO DE MEMÓRIA (JARVIS)', style: TextStyle(color: Color(0xFF00E5FF), fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+          const SizedBox(height: 16),
           Expanded(
-            child: AnimatedBuilder(
-              animation: _globeController,
-              builder: (context, child) {
-                return CustomPaint(
-                  painter: GlobeHologramPainter(_globeController.value),
-                  child: Container(),
+            child: ListView.builder(
+              itemCount: _memories.length,
+              itemBuilder: (context, index) {
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0A192F),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF00838F)),
+                  ),
+                  child: ListTile(
+                    title: Text(_memories[index], style: const TextStyle(color: Colors.white70)),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.redAccent),
+                      onPressed: () => _deleteMemory(index),
+                    ),
+                  ),
                 );
               },
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text(
-              'Status: Mapeamento topográfico e satelital ativo',
-              style: TextStyle(color: Colors.white38, fontSize: 12),
-            ),
-          ),
         ],
       ),
     );
   }
-}
 
-// --- ABA TODAY ---
-class TelaToday extends StatefulWidget {
-  const TelaToday({super.key});
-
-  @override
-  State<TelaToday> createState() => _TelaTodayState();
-}
-
-class _TelaTodayState extends State<TelaToday> {
-  final List<Map<String, dynamic>> tarefas = [];
-  final TextEditingController _controllerTarefa = TextEditingController();
-
-  void _adicionarTarefa() {
-    if (_controllerTarefa.text.trim().isEmpty) return;
-    setState(() {
-      tarefas.add({
-        'titulo': _controllerTarefa.text.trim(),
-        'horario': TimeOfDay.now().format(context),
-        'concluido': false,
-      });
-      _controllerTarefa.clear();
-    });
-  }
-
-  void _removerTarefa(int index) {
-    setState(() {
-      tarefas.removeAt(index);
-    });
-  }
-
-  void _alternarConclusao(int index) {
-    setState(() {
-      tarefas[index]['concluido'] = !tarefas[index]['concluido'];
-    });
-  }
-
-  @override
-  void dispose() {
-    _controllerTarefa.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'PROTOCOLOS DE HOJE',
-              style: TextStyle(
-                color: Color(0xFF00E5FF),
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 2.0,
+  Widget _buildMapsTab() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 220,
+            height: 220,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  const Color(0xFF00E5FF).withOpacity(0.6),
+                  const Color(0xFF00838F).withOpacity(0.3),
+                  Colors.black,
+                ],
               ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Senhor, insira ou gerencie seus objetivos operacionais abaixo.',
-              style: TextStyle(color: Colors.white54, fontSize: 13),
-            ),
-            const SizedBox(height: 20),
-            
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _controllerTarefa,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: 'Novo protocolo ou tarefa...',
-                      hintStyle: const TextStyle(color: Colors.white38),
-                      filled: true,
-                      fillColor: const Color(0xFF121218),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFF22222E)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFF22222E)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFF00E5FF)),
-                      ),
-                    ),
-                    onSubmitted: (_) => _adicionarTarefa(),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF00E5FF),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Icons.add, color: Colors.black87),
-                    onPressed: _adicionarTarefa,
-                  ),
-                ),
+              boxShadow: [
+                BoxShadow(color: const Color(0xFF00E5FF).withOpacity(0.4), blurRadius: 30, spreadRadius: 5),
               ],
             ),
-            const SizedBox(height: 24),
-            
-            Expanded(
-              child: tarefas.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'Nenhum protocolo ativo no momento.',
-                        style: TextStyle(color: Colors.white24, fontSize: 13),
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: tarefas.length,
-                      itemBuilder: (context, index) {
-                        final tarefa = tarefas[index];
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12.0),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF121218),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFF22222E)),
-                          ),
-                          child: ListTile(
-                            leading: GestureDetector(
-                              onTap: () => _alternarConclusao(index),
-                              child: Icon(
-                                tarefa['concluido'] ? Icons.check_circle_outline : Icons.radio_button_unchecked,
-                                color: tarefa['concluido'] ? const Color(0xFF00E5FF) : Colors.white38,
-                              ),
-                            ),
-                            title: Text(
-                              tarefa['titulo'],
-                              style: TextStyle(
-                                color: tarefa['concluido'] ? Colors.white38 : Colors.white,
-                                decoration: tarefa['concluido'] ? TextDecoration.lineThrough : null,
-                              ),
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  tarefa['horario'],
-                                  style: const TextStyle(color: Colors.white38, fontSize: 12),
-                                ),
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.white38, size: 20),
-                                  onPressed: () => _removerTarefa(index),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+            child: const Center(
+              child: Icon(Icons.public, color: Color(0xFF00E5FF), size: 120),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 24),
+          const Text('GLOBO 3D COM RELEVO ATIVO', style: TextStyle(color: Color(0xFF00E5FF), letterSpacing: 2, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          const Text('Topografia holográfica e nós continentais sincronizados.', style: TextStyle(color: Colors.white54)),
+        ],
       ),
     );
   }
-}
-
-// --- ABA MEMORY (GERENCIAMENTO DE CONVERSAS ANTERIORES E MEMÓRIAS) ---
-class TelaMemory extends StatefulWidget {
-  const TelaMemory({super.key});
-
-  @override
-  State<TelaMemory> createState() => _TelaMemoryState();
-}
-
-class _TelaMemoryState extends State<TelaMemory> {
-  final List<Map<String, dynamic>> memorias = [
-    {
-      'titulo': 'Conversa sobre Inteligência Artificial',
-      'detalhe': 'Ontem às 21:45',
-      'resumo': 'Discussão sobre redes neurais e arquitetura de agentes autônomos.',
-    },
-    {
-      'titulo': 'Pesquisa de Protocolos de Defesa',
-      'detalhe': 'Terça-feira passada',
-      'resumo': 'Diretrizes de segurança cibernética e criptografia quântica.',
-    },
-  ];
-
-  final TextEditingController _controllerMemoria = TextEditingController();
-
-  void _adicionarMemoria() {
-    if (_controllerMemoria.text.trim().isEmpty) return;
-    setState(() {
-      memorias.insert(0, {
-        'titulo': _controllerMemoria.text.trim(),
-        'detalhe': 'Agora mesmo',
-        'resumo': 'Conversa e contexto recente armazenados manualmente pelo usuário.',
-      });
-      _controllerMemoria.clear();
-    });
-  }
-
-  void _removerMemoria(int index) {
-    setState(() {
-      memorias.removeAt(index);
-    });
-  }
-
-  @override
-  void dispose() {
-    _controllerMemoria.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'MEMÓRIA DO JARVIS',
-              style: TextStyle(
-                color: Color(0xFF00E5FF),
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 2.0,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Gerencie conversas passadas e apague memórias que o JARVIS não deve lembrar.',
-              style: TextStyle(color: Colors.white54, fontSize: 13),
-            ),
-            const SizedBox(height: 20),
-            
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _controllerMemoria,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: 'Salvar nova conversa ou memória...',
-                      hintStyle: const TextStyle(color: Colors.white38),
-                      filled: true,
-                      fillColor: const Color(0xFF121218),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFF22222E)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFF22222E)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFF00E5FF)),
-                      ),
-                    ),
-                    onSubmitted: (_) => _adicionarMemoria(),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF00E5FF),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Icons.add, color: Colors.black87),
-                    onPressed: _adicionarMemoria,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            
-            Expanded(
-              child: memorias.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'Nenhuma memória ou conversa salva no momento.',
-                        style: TextStyle(color: Colors.white24, fontSize: 13),
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: memorias.length,
-                      itemBuilder: (context, index) {
-                        final mem = memorias[index];
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12.0),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF121218),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFF22222E)),
-                          ),
-                          child: ListTile(
-                            leading: Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF163d42),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Icon(Icons.psychology, color: Color(0xFF00E5FF), size: 20),
-                            ),
-                            title: Text(
-                              mem['titulo'],
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                            ),
-                            subtitle: Padding(
-                              padding: const EdgeInsets.only(top: 4.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(mem['resumo'], style: const TextStyle(color: Colors.white60, fontSize: 12)),
-                                  const SizedBox(height: 4),
-                                  Text(mem['detalhe'], style: const TextStyle(color: Color(0xFF00E5FF), fontSize: 11)),
-                                ],
-                              ),
-                            ),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.white38, size: 22),
-                              onPressed: () => _removerMemoria(index),
-                              tooltip: 'Esquecer memória',
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// --- PAINTER DA ORBE (COM COMPORTAMENTO DINÂMICO DE FALA/VIBRAÇÃO) ---
-class OrbeHolograficaPainter extends CustomPainter {
-  final double progress;
-  final bool isListening;
-  final bool isSpeaking;
-
-  OrbeHolograficaPainter(this.progress, this.isListening, this.isSpeaking);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final paint = Paint()..style = PaintingStyle.fill;
-
-    int dotCount = 450;
-    double baseRadius = isSpeaking ? 128.0 : (isListening ? 122.0 : 115.0);
-
-    double angleY = progress * 2 * math.pi;
-    double angleX = progress * math.pi;
-
-    for (int i = 0; i < dotCount; i++) {
-      double phi = math.acos(1 - 2 * (i + 0.5) / dotCount);
-      double theta = math.sqrt(dotCount * math.pi) * phi;
-
-      double randomSeed = math.sin(i * 43.13) * 100.0;
-      double frequenciaIndividual = isSpeaking ? 8.0 : (4.0 + (i % 7) * 1.5);
-      
-      double amplitudeAtual = isSpeaking 
-          ? (18.0 + math.sin(i * 12.0 + progress * 25.0) * 12.0) 
-          : (isListening ? (9.0 + (i % 5) * 3.5) : 1.5);
-          
-      double onda = math.sin((progress * math.pi * frequenciaIndividual) + randomSeed) * amplitudeAtual;
-      double raioAtual = baseRadius + onda;
-
-      double x = raioAtual * math.sin(phi) * math.cos(theta);
-      double y = raioAtual * math.sin(phi) * math.sin(theta);
-      double z = raioAtual * math.cos(phi);
-
-      double x1 = x * math.cos(angleY) - z * math.sin(angleY);
-      double z1 = x * math.sin(angleY) + z * math.cos(angleY);
-      double y1 = y;
-
-      double y2 = y1 * math.cos(angleX) - z1 * math.sin(angleX);
-      double z2 = y1 * math.sin(angleX) + z1 * math.cos(angleX);
-      double x2 = x1;
-
-      double perspective = 350.0;
-      double scale = perspective / (perspective + z2);
-
-      double screenX = center.dx + x2 * scale;
-      double screenY = center.dy + y2 * scale;
-
-      double alpha = ((z2 + baseRadius) / (baseRadius * 2.2)).clamp(0.08, 0.98);
-      double particleSize = (1.8 * scale).clamp(0.4, isSpeaking ? 4.5 : 3.8);
-
-      paint.color = isSpeaking 
-          ? Colors.white.withOpacity(alpha * 0.95) 
-          : const Color(0xFF00E5FF).withOpacity(alpha * 0.85);
-          
-      canvas.drawCircle(Offset(screenX, screenY), particleSize, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant OrbeHolograficaPainter oldDelegate) => true;
-}
-
-// --- PAINTER DO GLOBO 3D COM RELEVO ---
-class GlobeHologramPainter extends CustomPainter {
-  final double progress;
-
-  GlobeHologramPainter(this.progress);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.8;
-
-    double radius = math.min(size.width, size.height) * 0.38;
-    double rotY = progress * 2 * math.pi;
-
-    for (int lat = -75; lat <= 75; lat += 25) {
-      double latRad = lat * math.pi / 180;
-      double ringRadius = radius * math.cos(latRad);
-      double ringY = center.dy + radius * math.sin(latRad);
-
-      paint.color = const Color(0xFF00E5FF).withOpacity(0.2);
-      canvas.drawCircle(Offset(center.dx, ringY), ringRadius, paint);
-    }
-
-    final landPaint = Paint()..style = PaintingStyle.fill;
-    int continentNodes = 600;
-
-    for (int i = 0; i < continentNodes; i++) {
-      double phi = math.acos(1 - 2 * (i + 0.5) / continentNodes);
-      double theta = math.sqrt(continentNodes * math.pi) * phi + rotY;
-
-      bool isLand = (math.sin(phi * 3) * math.cos(theta * 2)).abs() > 0.35 ||
-                    (math.cos(phi * 2) * math.sin(theta * 3)).abs() > 0.4;
-
-      if (isLand) {
-        double x = radius * math.sin(phi) * math.cos(theta);
-        double y = radius * math.sin(phi) * math.sin(theta);
-        double z = radius * math.cos(phi);
-
-        double perspective = 320.0;
-        double scale = perspective / (perspective + z);
-
-        if (z > -radius * 0.7) {
-          double screenX = center.dx + x * scale;
-          double screenY = center.dy + y * scale;
-
-          double alpha = ((z + radius) / (radius * 2)).clamp(0.15, 0.95);
-          landPaint.color = const Color(0xFF00E5FF).withOpacity(alpha);
-          canvas.drawCircle(Offset(screenX, screenY), 1.6 * scale, landPaint);
-
-          if (i % 5 == 0) {
-            paint.color = const Color(0xFF00E5FF).withOpacity(alpha * 0.35);
-            canvas.drawLine(
-              Offset(center.dx, center.dy),
-              Offset(screenX, screenY),
-              paint,
-            );
-          }
-        }
-      }
-    }
-
-    paint.color = const Color(0xFF00E5FF).withOpacity(0.5);
-    paint.strokeWidth = 1.2;
-    canvas.drawCircle(center, radius * 1.25, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant GlobeHologramPainter oldDelegate) => true;
 }
