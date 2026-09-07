@@ -432,7 +432,7 @@ class _InterfacePrincipalState extends State<InterfacePrincipal> with TickerProv
 
   Widget _cardStatus(String titulo, String conteudo, IconData icone) {
     return Container(
-      width: double.infinite,
+      width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: corStark.withOpacity(0.05),
