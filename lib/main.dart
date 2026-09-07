@@ -80,6 +80,7 @@ class _NavegacaoPrincipalState extends State<NavegacaoPrincipal> {
   }
 }
 
+// --- TELA PRINCIPAL DE VOZ, ORBE E ENTRADA DE TEXTO/ÁUDIO ---
 class TelaJarvisVoice extends StatefulWidget {
   const TelaJarvisVoice({super.key});
 
@@ -89,7 +90,9 @@ class TelaJarvisVoice extends StatefulWidget {
 
 class _TelaJarvisVoiceState extends State<TelaJarvisVoice> with SingleTickerProviderStateMixin {
   late AnimationController controller;
-  bool jarvisFalando = false;
+  bool jarvisOuvindo = false;
+  bool mostrarCampoTexto = false;
+  final TextEditingController _textController = TextEditingController();
 
   @override
   void initState() {
@@ -100,12 +103,27 @@ class _TelaJarvisVoiceState extends State<TelaJarvisVoice> with SingleTickerProv
   @override
   void dispose() {
     controller.dispose();
+    _textController.dispose();
     super.dispose();
   }
 
-  void alternarFala() {
+  void alternarOuvir() {
     setState(() {
-      jarvisFalando = !jarvisFalando;
+      jarvisOuvindo = !jarvisOuvindo;
+    });
+  }
+
+  void alternarTeclado() {
+    setState(() {
+      mostrarCampoTexto = !mostrarCampoTexto;
+    });
+  }
+
+  void _enviarComandoTexto(String valor) {
+    if (valor.trim().isEmpty) return;
+    setState(() {
+      _textController.clear();
+      mostrarCampoTexto = false;
     });
   }
 
@@ -143,7 +161,7 @@ class _TelaJarvisVoiceState extends State<TelaJarvisVoice> with SingleTickerProv
               animation: controller,
               builder: (context, child) {
                 return CustomPaint(
-                  painter: OrbeHolograficaPainter(controller.value, jarvisFalando),
+                  painter: OrbeHolograficaPainter(controller.value, jarvisOuvindo),
                 );
               },
             ),
@@ -152,17 +170,65 @@ class _TelaJarvisVoiceState extends State<TelaJarvisVoice> with SingleTickerProv
           const SizedBox(height: 24),
 
           Text(
-            jarvisFalando ? 'JARVIS está falando...' : '•••• Ouvindo... ••••',
+            jarvisOuvindo ? '•••• Ouvindo comando de voz... ••••' : 'JARVIS Mark IV [Pronto]',
             style: TextStyle(
-              color: jarvisFalando ? const Color(0xFF00E5FF) : Colors.white60, 
+              color: jarvisOuvindo ? const Color(0xFF00E5FF) : Colors.white60, 
               fontSize: 14,
-              fontWeight: jarvisFalando ? FontWeight.w500 : FontWeight.normal,
+              fontWeight: jarvisOuvindo ? FontWeight.w500 : FontWeight.normal,
             ),
           ),
 
           const Spacer(),
 
-          IconButton(icon: const Icon(Icons.keyboard_outlined, color: Colors.white60), onPressed: () {}),
+          // Barra de digitação dinâmica ativada pelo botão do teclado
+          if (mostrarCampoTexto)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _textController,
+                      autofocus: true,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Digite o comando para o JARVIS...',
+                        hintStyle: const TextStyle(color: Colors.white38),
+                        filled: true,
+                        fillColor: const Color(0xFF121218),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF00E5FF)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF22222E)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF00E5FF)),
+                        ),
+                      ),
+                      onSubmitted: _enviarComandoTexto,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.send, color: Color(0xFF00E5FF)),
+                    onPressed: () => _enviarComandoTexto(_textController.text),
+                  ),
+                ],
+              ),
+            ),
+
+          IconButton(
+            icon: Icon(
+              mostrarCampoTexto ? Icons.keyboard_hide_outlined : Icons.keyboard_outlined, 
+              color: mostrarCampoTexto ? const Color(0xFF00E5FF) : Colors.white60,
+            ), 
+            onPressed: alternarTeclado,
+          ),
           const SizedBox(height: 10),
 
           Padding(
@@ -170,25 +236,25 @@ class _TelaJarvisVoiceState extends State<TelaJarvisVoice> with SingleTickerProv
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Container(
-                  decoration: const BoxDecoration(color: Color(0xFF1a1a20), shape: BoxShape.circle),
-                  child: IconButton(icon: const Icon(Icons.close, color: Colors.white70), onPressed: () {}),
-                ),
+                const SizedBox(width: 48), // Espaço equilibrado (X removido)
                 
                 GestureDetector(
-                  onTap: alternarFala,
+                  onTap: alternarOuvir,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
-                    width: jarvisFalando ? 64 : 72,
-                    height: jarvisFalando ? 64 : 72,
+                    width: jarvisOuvindo ? 76 : 72,
+                    height: jarvisOuvindo ? 76 : 72,
                     decoration: BoxDecoration(
-                      color: jarvisFalando ? const Color(0xFF00E5FF) : const Color(0xFF163d42), 
+                      color: jarvisOuvindo ? const Color(0xFF00E5FF) : const Color(0xFF163d42), 
                       shape: BoxShape.circle,
+                      boxShadow: jarvisOuvindo ? [
+                        BoxShadow(color: const Color(0xFF00E5FF).withOpacity(0.5), blurRadius: 15, spreadRadius: 2)
+                      ] : [],
                     ),
                     child: Icon(
-                      jarvisFalando ? Icons.stop_rounded : Icons.mic, 
-                      color: jarvisFalando ? Colors.black87 : const Color(0xFF00E5FF), 
-                      size: jarvisFalando ? 32 : 36,
+                      jarvisOuvindo ? Icons.mic : Icons.mic_none_outlined, 
+                      color: jarvisOuvindo ? Colors.black87 : const Color(0xFF00E5FF), 
+                      size: 36,
                     ),
                   ),
                 ),
@@ -206,6 +272,7 @@ class _TelaJarvisVoiceState extends State<TelaJarvisVoice> with SingleTickerProv
   }
 }
 
+// --- ABA MAPS: GLOBO 3D REAL COM CONTINENTES E RELEVOS ---
 class TelaMapsGlobe extends StatefulWidget {
   const TelaMapsGlobe({super.key});
 
@@ -219,7 +286,7 @@ class _TelaMapsGlobeState extends State<TelaMapsGlobe> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
-    _globeController = AnimationController(duration: const Duration(seconds: 20), vsync: this)..repeat();
+    _globeController = AnimationController(duration: const Duration(seconds: 25), vsync: this)..repeat();
   }
 
   @override
@@ -248,7 +315,7 @@ class _TelaMapsGlobeState extends State<TelaMapsGlobe> with SingleTickerProvider
                   ),
                 ),
                 Text(
-                  'MK IV.02',
+                  'MK IV.04',
                   style: TextStyle(color: Colors.white38, fontSize: 12),
                 ),
               ],
@@ -268,7 +335,7 @@ class _TelaMapsGlobeState extends State<TelaMapsGlobe> with SingleTickerProvider
           const Padding(
             padding: EdgeInsets.all(16.0),
             child: Text(
-              'Status: Sincronização orbital ativa • Lat/Long Grid Online',
+              'Status: Mapeamento topográfico e satelital ativo',
               style: TextStyle(color: Colors.white38, fontSize: 12),
             ),
           ),
@@ -448,17 +515,17 @@ class _TelaTodayState extends State<TelaToday> {
 
 class OrbeHolograficaPainter extends CustomPainter {
   final double progress;
-  final bool isSpeaking;
+  final bool isListening;
 
-  OrbeHolograficaPainter(this.progress, this.isSpeaking);
+  OrbeHolograficaPainter(this.progress, this.isListening);
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final paint = Paint()..style = PaintingStyle.fill;
 
-    int dotCount = 420;
-    double baseRadius = isSpeaking ? 120.0 : 115.0;
+    int dotCount = 450;
+    double baseRadius = isListening ? 125.0 : 115.0;
 
     double angleY = progress * 2 * math.pi;
     double angleX = progress * math.pi;
@@ -470,7 +537,7 @@ class OrbeHolograficaPainter extends CustomPainter {
       double randomSeed = math.sin(i * 43.13) * 100.0;
       double frequenciaIndividual = 4.0 + (i % 7) * 1.5;
       
-      double amplitudeAtual = isSpeaking ? (8.0 + (i % 5) * 3.5) : 1.5;
+      double amplitudeAtual = isListening ? (9.0 + (i % 5) * 3.5) : 1.5;
       double onda = math.sin((progress * math.pi * frequenciaIndividual) + randomSeed) * amplitudeAtual;
       
       double raioAtual = baseRadius + onda;
@@ -505,6 +572,7 @@ class OrbeHolograficaPainter extends CustomPainter {
   bool shouldRepaint(covariant OrbeHolograficaPainter oldDelegate) => true;
 }
 
+// --- RENDERIZADOR DO GLOBO 3D DETALHADO COM CONTORNOS E CONTINENTES ---
 class GlobeHologramPainter extends CustomPainter {
   final double progress;
 
@@ -515,66 +583,71 @@ class GlobeHologramPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final paint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
+      ..strokeWidth = 0.8;
 
     double radius = math.min(size.width, size.height) * 0.38;
     double rotY = progress * 2 * math.pi;
 
-    for (int lat = -60; lat <= 60; lat += 30) {
+    for (int lat = -75; lat <= 75; lat += 25) {
       double latRad = lat * math.pi / 180;
       double ringRadius = radius * math.cos(latRad);
       double ringY = center.dy + radius * math.sin(latRad);
 
-      paint.color = const Color(0xFF00E5FF).withOpacity(0.25);
+      paint.color = const Color(0xFF00E5FF).withOpacity(0.2);
       canvas.drawCircle(Offset(center.dx, ringY), ringRadius, paint);
     }
 
-    final dotPaint = Paint()..style = PaintingStyle.fill;
-    int pointsCount = 300;
+    final landPaint = Paint()..style = PaintingStyle.fill;
+    int continentNodes = 600;
 
-    for (int i = 0; i < pointsCount; i++) {
-      double phi = math.acos(1 - 2 * (i + 0.5) / pointsCount);
-      double theta = math.sqrt(pointsCount * math.pi) * phi + rotY;
+    for (int i = 0; i < continentNodes; i++) {
+      double phi = math.acos(1 - 2 * (i + 0.5) / continentNodes);
+      double theta = math.sqrt(continentNodes * math.pi) * phi + rotY;
 
-      double x = radius * math.sin(phi) * math.cos(theta);
-      double y = radius * math.sin(phi) * math.sin(theta);
-      double z = radius * math.cos(phi);
+      bool isLand = (math.sin(phi * 3) * math.cos(theta * 2)).abs() > 0.35 ||
+                    (math.cos(phi * 2) * math.sin(theta * 3)).abs() > 0.4;
 
-      double perspective = 300.0;
-      double scale = perspective / (perspective + z);
+      if (isLand) {
+        double x = radius * math.sin(phi) * math.cos(theta);
+        double y = radius * math.sin(phi) * math.sin(theta);
+        double z = radius * math.cos(phi);
 
-      if (z > -radius * 0.5) {
-        double screenX = center.dx + x * scale;
-        double screenY = center.dy + y * scale;
+        double perspective = 320.0;
+        double scale = perspective / (perspective + z);
 
-        double alpha = ((z + radius) / (radius * 2)).clamp(0.1, 0.9);
-        dotPaint.color = const Color(0xFF00E5FF).withOpacity(alpha);
-        canvas.drawCircle(Offset(screenX, screenY), 1.5 * scale, dotPaint);
+        if (z > -radius * 0.7) {
+          double screenX = center.dx + x * scale;
+          double screenY = center.dy + y * scale;
 
-        if (i % 7 == 0) {
-          paint.color = const Color(0xFF00E5FF).withOpacity(alpha * 0.3);
-          canvas.drawLine(
-            Offset(center.dx, center.dy),
-            Offset(screenX, screenY),
-            paint,
-          );
+          double alpha = ((z + radius) / (radius * 2)).clamp(0.15, 0.95);
+          landPaint.color = const Color(0xFF00E5FF).withOpacity(alpha);
+          canvas.drawCircle(Offset(screenX, screenY), 1.6 * scale, landPaint);
+
+          if (i % 5 == 0) {
+            paint.color = const Color(0xFF00E5FF).withOpacity(alpha * 0.35);
+            canvas.drawLine(
+              Offset(center.dx, center.dy),
+              Offset(screenX, screenY),
+              paint,
+            );
+          }
         }
       }
     }
 
-    paint.color = const Color(0xFF00E5FF).withOpacity(0.4);
-    paint.strokeWidth = 1.5;
-    canvas.drawCircle(center, radius * 1.2, paint);
+    paint.color = const Color(0xFF00E5FF).withOpacity(0.5);
+    paint.strokeWidth = 1.2;
+    canvas.drawCircle(center, radius * 1.25, paint);
 
     TextPainter textPainter = TextPainter(
       text: const TextSpan(
-        text: 'SYS_LOC // 23.5505° S, 46.6333° W',
-        style: TextStyle(color: Color(0xFF00E5FF), fontSize: 10, letterSpacing: 1.2),
+        text: 'ORBITAL_SAT // 3D_GRID_ACTIVE',
+        style: TextStyle(color: Color(0xFF00E5FF), fontSize: 10, letterSpacing: 1.5),
       ),
       textDirection: TextDirection.ltr,
     );
     textPainter.layout();
-    textPainter.paint(canvas, Offset(center.dx - textPainter.width / 2, center.dy + radius * 1.35));
+    textPainter.paint(canvas, Offset(center.dx - textPainter.width / 2, center.dy + radius * 1.4));
   }
 
   @override
