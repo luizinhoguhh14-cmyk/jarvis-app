@@ -11,7 +11,7 @@ class JarvisAppClone extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'JARVIS Mark IV',
+      title: 'JARVIS',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
@@ -37,7 +37,7 @@ class _NavegacaoPrincipalState extends State<NavegacaoPrincipal> {
     const TelaJarvisVoice(),
     const TelaMapsGlobe(),
     const TelaToday(),
-    const Center(child: Text('Memory Matrix [Standby - Mark IV]', style: TextStyle(color: Colors.white54, letterSpacing: 1.5))),
+    const TelaMemory(),
   ];
 
   @override
@@ -80,7 +80,7 @@ class _NavegacaoPrincipalState extends State<NavegacaoPrincipal> {
   }
 }
 
-// --- TELA PRINCIPAL DE VOZ, ORBE E ENTRADA DE TEXTO/ÁUDIO ---
+// --- TELA PRINCIPAL: ORBE & INTERAÇÃO DE VOZ/FALA ---
 class TelaJarvisVoice extends StatefulWidget {
   const TelaJarvisVoice({super.key});
 
@@ -91,13 +91,15 @@ class TelaJarvisVoice extends StatefulWidget {
 class _TelaJarvisVoiceState extends State<TelaJarvisVoice> with SingleTickerProviderStateMixin {
   late AnimationController controller;
   bool jarvisOuvindo = false;
+  bool jarvisFalando = false;
   bool mostrarCampoTexto = false;
   final TextEditingController _textController = TextEditingController();
+  String statusMensagem = 'JARVIS [Pronto, Senhor]';
 
   @override
   void initState() {
     super.initState();
-    controller = AnimationController(duration: const Duration(seconds: 12), vsync: this)..repeat();
+    controller = AnimationController(duration: const Duration(seconds: 10), vsync: this)..repeat();
   }
 
   @override
@@ -110,6 +112,13 @@ class _TelaJarvisVoiceState extends State<TelaJarvisVoice> with SingleTickerProv
   void alternarOuvir() {
     setState(() {
       jarvisOuvindo = !jarvisOuvindo;
+      if (jarvisOuvindo) {
+        statusMensagem = '•••• Ouvindo comando de voz... ••••';
+        jarvisFalando = false;
+      } else {
+        statusMensagem = 'Processando áudio...';
+        _simularRespostaJarvis("Comando de voz processado.");
+      }
     });
   }
 
@@ -121,10 +130,32 @@ class _TelaJarvisVoiceState extends State<TelaJarvisVoice> with SingleTickerProv
 
   void _enviarComandoTexto(String valor) {
     if (valor.trim().isEmpty) return;
+    String comando = valor.trim();
     setState(() {
       _textController.clear();
       mostrarCampoTexto = false;
+      statusMensagem = 'Processando: "$comando"';
     });
+    _simularRespostaJarvis(comando);
+  }
+
+  Future<void> _simularRespostaJarvis(String comando) async {
+    await Future.delayed(const Duration(milliseconds: 600));
+    if (!mounted) return;
+
+    setState(() {
+      jarvisFalando = true;
+      statusMensagem = 'JARVIS: Executando diretiva...';
+    });
+
+    await Future.delayed(const Duration(seconds: 3));
+
+    if (mounted) {
+      setState(() {
+        jarvisFalando = false;
+        statusMensagem = 'JARVIS [Pronto, Senhor]';
+      });
+    }
   }
 
   @override
@@ -139,7 +170,7 @@ class _TelaJarvisVoiceState extends State<TelaJarvisVoice> with SingleTickerProv
               children: [
                 IconButton(icon: const Icon(Icons.access_time, color: Colors.white70), onPressed: () {}),
                 const Text(
-                  'JARVIS MK IV', 
+                  'JARVIS', 
                   style: TextStyle(
                     color: Colors.white, 
                     fontSize: 18, 
@@ -161,7 +192,7 @@ class _TelaJarvisVoiceState extends State<TelaJarvisVoice> with SingleTickerProv
               animation: controller,
               builder: (context, child) {
                 return CustomPaint(
-                  painter: OrbeHolograficaPainter(controller.value, jarvisOuvindo),
+                  painter: OrbeHolograficaPainter(controller.value, jarvisOuvindo, jarvisFalando),
                 );
               },
             ),
@@ -170,17 +201,16 @@ class _TelaJarvisVoiceState extends State<TelaJarvisVoice> with SingleTickerProv
           const SizedBox(height: 24),
 
           Text(
-            jarvisOuvindo ? '•••• Ouvindo comando de voz... ••••' : 'JARVIS Mark IV [Pronto]',
+            statusMensagem,
             style: TextStyle(
-              color: jarvisOuvindo ? const Color(0xFF00E5FF) : Colors.white60, 
+              color: (jarvisOuvindo || jarvisFalando) ? const Color(0xFF00E5FF) : Colors.white60, 
               fontSize: 14,
-              fontWeight: jarvisOuvindo ? FontWeight.w500 : FontWeight.normal,
+              fontWeight: (jarvisOuvindo || jarvisFalando) ? FontWeight.w500 : FontWeight.normal,
             ),
           ),
 
           const Spacer(),
 
-          // Barra de digitação dinâmica ativada pelo botão do teclado
           if (mostrarCampoTexto)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
@@ -236,7 +266,7 @@ class _TelaJarvisVoiceState extends State<TelaJarvisVoice> with SingleTickerProv
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const SizedBox(width: 48), // Espaço equilibrado (X removido)
+                const SizedBox(width: 48),
                 
                 GestureDetector(
                   onTap: alternarOuvir,
@@ -272,7 +302,7 @@ class _TelaJarvisVoiceState extends State<TelaJarvisVoice> with SingleTickerProv
   }
 }
 
-// --- ABA MAPS: GLOBO 3D REAL COM CONTINENTES E RELEVOS ---
+// --- ABA MAPS: GLOBO 3D COM RELEVO ---
 class TelaMapsGlobe extends StatefulWidget {
   const TelaMapsGlobe({super.key});
 
@@ -315,7 +345,7 @@ class _TelaMapsGlobeState extends State<TelaMapsGlobe> with SingleTickerProvider
                   ),
                 ),
                 Text(
-                  'MK IV.04',
+                  'JARVIS',
                   style: TextStyle(color: Colors.white38, fontSize: 12),
                 ),
               ],
@@ -345,6 +375,7 @@ class _TelaMapsGlobeState extends State<TelaMapsGlobe> with SingleTickerProvider
   }
 }
 
+// --- ABA TODAY ---
 class TelaToday extends StatefulWidget {
   const TelaToday({super.key});
 
@@ -513,11 +544,188 @@ class _TelaTodayState extends State<TelaToday> {
   }
 }
 
+// --- ABA MEMORY (GERENCIAMENTO DE CONVERSAS ANTERIORES E MEMÓRIAS) ---
+class TelaMemory extends StatefulWidget {
+  const TelaMemory({super.key});
+
+  @override
+  State<TelaMemory> createState() => _TelaMemoryState();
+}
+
+class _TelaMemoryState extends State<TelaMemory> {
+  final List<Map<String, dynamic>> memorias = [
+    {
+      'titulo': 'Conversa sobre Inteligência Artificial',
+      'detalhe': 'Ontem às 21:45',
+      'resumo': 'Discussão sobre redes neurais e arquitetura de agentes autônomos.',
+    },
+    {
+      'titulo': 'Pesquisa de Protocolos de Defesa',
+      'detalhe': 'Terça-feira passada',
+      'resumo': 'Diretrizes de segurança cibernética e criptografia quântica.',
+    },
+  ];
+
+  final TextEditingController _controllerMemoria = TextEditingController();
+
+  void _adicionarMemoria() {
+    if (_controllerMemoria.text.trim().isEmpty) return;
+    setState(() {
+      memorias.insert(0, {
+        'titulo': _controllerMemoria.text.trim(),
+        'detalhe': 'Agora mesmo',
+        'resumo': 'Conversa e contexto recente armazenados manualmente pelo usuário.',
+      });
+      _controllerMemoria.clear();
+    });
+  }
+
+  void _removerMemoria(int index) {
+    setState(() {
+      memorias.removeAt(index);
+    });
+  }
+
+  @override
+  void dispose() {
+    _controllerMemoria.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'MEMÓRIA DO JARVIS',
+              style: TextStyle(
+                color: Color(0xFF00E5FF),
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 2.0,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Gerencie conversas passadas e apague memórias que o JARVIS não deve lembrar.',
+              style: TextStyle(color: Colors.white54, fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controllerMemoria,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Salvar nova conversa ou memória...',
+                      hintStyle: const TextStyle(color: Colors.white38),
+                      filled: true,
+                      fillColor: const Color(0xFF121218),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFF22222E)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFF22222E)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFF00E5FF)),
+                      ),
+                    ),
+                    onSubmitted: (_) => _adicionarMemoria(),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF00E5FF),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.add, color: Colors.black87),
+                    onPressed: _adicionarMemoria,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            
+            Expanded(
+              child: memorias.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'Nenhuma memória ou conversa salva no momento.',
+                        style: TextStyle(color: Colors.white24, fontSize: 13),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: memorias.length,
+                      itemBuilder: (context, index) {
+                        final mem = memorias[index];
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12.0),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF121218),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFF22222E)),
+                          ),
+                          child: ListTile(
+                            leading: Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF163d42),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(Icons.psychology, color: Color(0xFF00E5FF), size: 20),
+                            ),
+                            title: Text(
+                              mem['titulo'],
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                            subtitle: Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(mem['resumo'], style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                                  const SizedBox(height: 4),
+                                  Text(mem['detalhe'], style: const TextStyle(color: Color(0xFF00E5FF), fontSize: 11)),
+                                ],
+                              ),
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.white38, size: 22),
+                              onPressed: () => _removerMemoria(index),
+                              tooltip: 'Esquecer memória',
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// --- PAINTER DA ORBE (COM COMPORTAMENTO DINÂMICO DE FALA/VIBRAÇÃO) ---
 class OrbeHolograficaPainter extends CustomPainter {
   final double progress;
   final bool isListening;
+  final bool isSpeaking;
 
-  OrbeHolograficaPainter(this.progress, this.isListening);
+  OrbeHolograficaPainter(this.progress, this.isListening, this.isSpeaking);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -525,7 +733,7 @@ class OrbeHolograficaPainter extends CustomPainter {
     final paint = Paint()..style = PaintingStyle.fill;
 
     int dotCount = 450;
-    double baseRadius = isListening ? 125.0 : 115.0;
+    double baseRadius = isSpeaking ? 128.0 : (isListening ? 122.0 : 115.0);
 
     double angleY = progress * 2 * math.pi;
     double angleX = progress * math.pi;
@@ -535,11 +743,13 @@ class OrbeHolograficaPainter extends CustomPainter {
       double theta = math.sqrt(dotCount * math.pi) * phi;
 
       double randomSeed = math.sin(i * 43.13) * 100.0;
-      double frequenciaIndividual = 4.0 + (i % 7) * 1.5;
+      double frequenciaIndividual = isSpeaking ? 8.0 : (4.0 + (i % 7) * 1.5);
       
-      double amplitudeAtual = isListening ? (9.0 + (i % 5) * 3.5) : 1.5;
+      double amplitudeAtual = isSpeaking 
+          ? (18.0 + math.sin(i * 12.0 + progress * 25.0) * 12.0) 
+          : (isListening ? (9.0 + (i % 5) * 3.5) : 1.5);
+          
       double onda = math.sin((progress * math.pi * frequenciaIndividual) + randomSeed) * amplitudeAtual;
-      
       double raioAtual = baseRadius + onda;
 
       double x = raioAtual * math.sin(phi) * math.cos(theta);
@@ -561,9 +771,12 @@ class OrbeHolograficaPainter extends CustomPainter {
       double screenY = center.dy + y2 * scale;
 
       double alpha = ((z2 + baseRadius) / (baseRadius * 2.2)).clamp(0.08, 0.98);
-      double particleSize = (1.8 * scale).clamp(0.4, 3.8);
+      double particleSize = (1.8 * scale).clamp(0.4, isSpeaking ? 4.5 : 3.8);
 
-      paint.color = const Color(0xFF00E5FF).withOpacity(alpha * 0.85);
+      paint.color = isSpeaking 
+          ? Colors.white.withOpacity(alpha * 0.95) 
+          : const Color(0xFF00E5FF).withOpacity(alpha * 0.85);
+          
       canvas.drawCircle(Offset(screenX, screenY), particleSize, paint);
     }
   }
@@ -572,7 +785,7 @@ class OrbeHolograficaPainter extends CustomPainter {
   bool shouldRepaint(covariant OrbeHolograficaPainter oldDelegate) => true;
 }
 
-// --- RENDERIZADOR DO GLOBO 3D DETALHADO COM CONTORNOS E CONTINENTES ---
+// --- PAINTER DO GLOBO 3D COM RELEVO ---
 class GlobeHologramPainter extends CustomPainter {
   final double progress;
 
@@ -638,16 +851,6 @@ class GlobeHologramPainter extends CustomPainter {
     paint.color = const Color(0xFF00E5FF).withOpacity(0.5);
     paint.strokeWidth = 1.2;
     canvas.drawCircle(center, radius * 1.25, paint);
-
-    TextPainter textPainter = TextPainter(
-      text: const TextSpan(
-        text: 'ORBITAL_SAT // 3D_GRID_ACTIVE',
-        style: TextStyle(color: Color(0xFF00E5FF), fontSize: 10, letterSpacing: 1.5),
-      ),
-      textDirection: TextDirection.ltr,
-    );
-    textPainter.layout();
-    textPainter.paint(canvas, Offset(center.dx - textPainter.width / 2, center.dy + radius * 1.4));
   }
 
   @override
