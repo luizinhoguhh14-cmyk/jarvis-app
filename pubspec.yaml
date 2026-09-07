@@ -1,4 +1,4 @@
-name: jarvis_core
+name: jarvis
 description: JARVIS AI Assistant.
 publish_to: 'none'
 version: 1.0.0+1
