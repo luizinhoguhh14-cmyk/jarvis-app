@@ -35,7 +35,7 @@ class GeminiService {
         return "Senhor, erro na API do Gemini (Status ${response.statusCode}).";
       }
     } catch (e) {
-      return "Senhor, falha na conexão com o Gemini.";
+      return "Senhor, falha na conexão com os servidores do Gemini.";
     }
   }
 }

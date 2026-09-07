@@ -52,10 +52,18 @@ class _TelaJarvisVoiceState extends State<TelaJarvisVoice> {
     });
 
     _voiceService.speak(resposta, (isSpeaking) {
-      setState(() {
-        _isSpeaking = isSpeaking;
-      });
+      if (mounted) {
+        setState(() {
+          _isSpeaking = isSpeaking;
+        });
+      }
     });
+  }
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    super.dispose();
   }
 
   @override
@@ -129,7 +137,7 @@ class _TelaJarvisVoiceState extends State<TelaJarvisVoice> {
                   ),
                   const SizedBox(width: 8),
                   IconButton(
-                    icon: _isLoading 
+                    icon: _isLoading
                         ? const CircularProgressIndicator(color: Colors.orangeAccent)
                         : const Icon(Icons.send, color: Colors.orangeAccent),
                     onPressed: () {
