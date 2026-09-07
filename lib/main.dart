@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const JarvisApp());
 }
 
@@ -33,7 +34,7 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen> {
   int _currentIndex = 0;
   final TextEditingController _textController = TextEditingController();
   final List<Map<String, String>> _messages = [];
-  final List<String> _memories = [];
+  List<String> _memories = [];
 
   @override
   void initState() {
@@ -42,29 +43,48 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen> {
   }
 
   Future<void> _loadMemories() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _memories.addAll(prefs.getStringList('jarvis_memories') ?? [
-        'Protocolo Inicializado com Sucesso.',
-        'Sistemas de Voz Sincronizados.',
-      ]);
-    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final loaded = prefs.getStringList('jarvis_memories');
+      if (loaded != null && mounted) {
+        setState(() {
+          _memories = loaded;
+        });
+      } else if (mounted) {
+        setState(() {
+          _memories = [
+            'Protocolo Inicializado com Sucesso.',
+            'Sistemas de Voz Sincronizados.',
+          ];
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _memories = ['Erro ao carregar banco de dados de memória.'];
+        });
+      }
+    }
   }
 
   Future<void> _saveMemory(String memory) async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _memories.add(memory);
-    });
-    await prefs.setStringList('jarvis_memories', _memories);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      setState(() {
+        _memories.add(memory);
+      });
+      await prefs.setStringList('jarvis_memories', _memories);
+    } catch (_) {}
   }
 
   Future<void> _deleteMemory(int index) async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _memories.removeAt(index);
-    });
-    await prefs.setStringList('jarvis_memories', _memories);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      setState(() {
+        _memories.removeAt(index);
+      });
+      await prefs.setStringList('jarvis_memories', _memories);
+    } catch (_) {}
   }
 
   void _sendMessage(String text) {
