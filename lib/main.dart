@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const JarvisApp());
 }
@@ -35,6 +35,7 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen> {
   final TextEditingController _textController = TextEditingController();
   final List<Map<String, String>> _messages = [];
   List<String> _memories = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -46,22 +47,20 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final loaded = prefs.getStringList('jarvis_memories');
-      if (loaded != null && mounted) {
+      if (mounted) {
         setState(() {
-          _memories = loaded;
-        });
-      } else if (mounted) {
-        setState(() {
-          _memories = [
+          _memories = loaded ?? [
             'Protocolo Inicializado com Sucesso.',
             'Sistemas de Voz Sincronizados.',
           ];
+          _isLoading = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _memories = ['Erro ao carregar banco de dados de memória.'];
+          _memories = ['Sistemas operacionais ativados.'];
+          _isLoading = false;
         });
       }
     }
@@ -91,7 +90,7 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen> {
     if (text.trim().isEmpty) return;
     setState(() {
       _messages.add({'sender': 'user', 'text': text});
-      _messages.add({'sender': 'jarvis', 'text': 'Compreendido, Senhor. Executando diretiva.'});
+      _messages.add({'sender': 'jarvis', 'text': 'Compreendido, Senhor.'});
       _textController.clear();
     });
     _saveMemory('Consulta: $text');
@@ -104,15 +103,17 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen> {
         backgroundColor: const Color(0xFF0A192F),
         title: const Text('J.A.R.V.I.S.', style: TextStyle(letterSpacing: 2, color: Color(0xFF00E5FF))),
       ),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          _buildCoreTab(),
-          _buildTodayTab(),
-          _buildMemoryTab(),
-          _buildMapsTab(),
-        ],
-      ),
+      body: _isLoading 
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF00E5FF)))
+          : IndexedStack(
+              index: _currentIndex,
+              children: [
+                _buildCoreTab(),
+                _buildTodayTab(),
+                _buildMemoryTab(),
+                _buildMapsTab(),
+              ],
+            ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
@@ -139,7 +140,7 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen> {
           ),
         ),
         Container(
-          height: 150,
+          height: 120,
           color: const Color(0xFF0A192F).withOpacity(0.5),
           child: ListView.builder(
             itemCount: _messages.length,
