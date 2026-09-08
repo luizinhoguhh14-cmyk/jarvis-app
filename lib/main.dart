@@ -1,221 +1,489 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:math' as math;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const JarvisApp());
+  runApp(const JarvisAppClone());
 }
 
-class JarvisApp extends StatelessWidget {
-  const JarvisApp({super.key});
+class JarvisAppClone extends StatelessWidget {
+  const JarvisAppClone({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Jarvis',
+      title: 'JARVIS',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF050B14),
-        primaryColor: const Color(0xFF00E5FF),
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF050301),
+        primaryColor: const Color(0xFFFF8C00),
+        fontFamily: 'Roboto',
       ),
-      home: const JarvisHomeScreen(),
+      home: const NavegacaoPrincipal(),
     );
   }
 }
 
-class JarvisHomeScreen extends StatefulWidget {
-  const JarvisHomeScreen({super.key});
+class NavegacaoPrincipal extends StatefulWidget {
+  const NavegacaoPrincipal({super.key});
 
   @override
-  State<JarvisHomeScreen> createState() => _JarvisHomeScreenState();
+  State<NavegacaoPrincipal> createState() => _NavegacaoPrincipalState();
 }
 
-class _JarvisHomeScreenState extends State<JarvisHomeScreen> {
-  int _currentIndex = 0;
-  final TextEditingController _textController = TextEditingController();
-  final List<Map<String, String>> _messages = [];
-  List<String> _memories = [];
-  bool _isLoading = true;
+class _NavegacaoPrincipalState extends State<NavegacaoPrincipal> {
+  int indiceAtual = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadMemories();
-  }
-
-  Future<void> _loadMemories() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final loaded = prefs.getStringList('jarvis_memories');
-      if (mounted) {
-        setState(() {
-          _memories = loaded ?? [
-            'Protocolo Inicializado com Sucesso.',
-            'Sistemas de Voz Sincronizados.',
-          ];
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _memories = ['Sistemas operacionais ativados.'];
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _saveMemory(String memory) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      setState(() {
-        _memories.add(memory);
-      });
-      await prefs.setStringList('jarvis_memories', _memories);
-    } catch (_) {}
-  }
-
-  Future<void> _deleteMemory(int index) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      setState(() {
-        _memories.removeAt(index);
-      });
-      await prefs.setStringList('jarvis_memories', _memories);
-    } catch (_) {}
-  }
-
-  void _sendMessage(String text) {
-    if (text.trim().isEmpty) return;
-    setState(() {
-      _messages.add({'sender': 'user', 'text': text});
-      _messages.add({'sender': 'jarvis', 'text': 'Compreendido, Senhor.'});
-      _textController.clear();
-    });
-    _saveMemory('Consulta: $text');
-  }
+  final List<Widget> telas = [
+    const TelaJarvisVoice(),
+    const TelaToday(),
+    const TelaMemory(),
+    const TelaRadar(),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0A192F),
-        title: const Text('J.A.R.V.I.S.', style: TextStyle(letterSpacing: 2, color: Color(0xFF00E5FF))),
-      ),
-      body: _isLoading 
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF00E5FF)))
-          : IndexedStack(
-              index: _currentIndex,
-              children: [
-                _buildCoreTab(),
-                _buildTodayTab(),
-                _buildMemoryTab(),
-                _buildMapsTab(),
-              ],
-            ),
+      body: telas[indiceAtual],
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        backgroundColor: const Color(0xFF0A192F),
-        selectedItemColor: const Color(0xFF00E5FF),
-        unselectedItemColor: Colors.grey,
+        backgroundColor: const Color(0xFF050301),
+        currentIndex: indiceAtual,
+        selectedItemColor: const Color(0xFFFF8C00),
+        unselectedItemColor: Colors.white38,
         type: BottomNavigationBarType.fixed,
+        selectedFontSize: 11,
+        unselectedFontSize: 11,
+        onTap: (index) {
+          setState(() {
+            indiceAtual = index;
+          });
+        },
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.bolt), label: 'JARVIS'),
-          BottomNavigationBarItem(icon: Icon(Icons.today), label: 'Today'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.blur_circular),
+            label: 'Jarvis',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.view_list_rounded),
+            label: 'Today',
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.memory), label: 'Memory'),
-          BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Maps'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.radar),
+            label: 'Radar',
+          ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildCoreTab() {
-    return Column(
-      children: [
-        const Expanded(
-          child: Center(
-            child: Text('ORBE HOLOGRÁFICA ATIVA', style: TextStyle(color: Color(0xFF00E5FF), letterSpacing: 2, fontWeight: FontWeight.bold)),
-          ),
-        ),
-        Container(
-          height: 120,
-          color: const Color(0xFF0A192F).withOpacity(0.5),
-          child: ListView.builder(
-            itemCount: _messages.length,
-            itemBuilder: (context, index) {
-              final msg = _messages[index];
-              return ListTile(
-                title: Text('${msg['sender'] == 'user' ? 'Senhor' : 'JARVIS'}: ${msg['text']}', style: const TextStyle(color: Colors.white70)),
-              );
+class TelaJarvisVoice extends StatefulWidget {
+  const TelaJarvisVoice({super.key});
+
+  @override
+  State<TelaJarvisVoice> createState() => _TelaJarvisVoiceState();
+}
+
+class _TelaJarvisVoiceState extends State<TelaJarvisVoice>
+    with SingleTickerProviderStateMixin {
+  late AnimationController controller;
+  bool jarvisFalando = false;
+  bool mostrandoTeclado = false;
+  final TextEditingController _textController = TextEditingController();
+
+  final String _apiKey = String.fromEnvironment("GEMINI_API_KEY");
+
+  final List<Map<String, dynamic>> _mensagensChat = [
+    {
+      "sender": "Jarvis",
+      "text": "Sistemas online, Senhor. Como posso ajudar?",
+      "showRadar": false,
+    },
+  ];
+
+  bool _carregando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = AnimationController(
+      duration: const Duration(seconds: 12),
+      vsync: this,
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    _textController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _enviarParaGemini(String texto) async {
+    if (texto.trim().isEmpty) return;
+
+    final comandoEnviado = texto;
+    bool pedeRadar =
+        comandoEnviado.toLowerCase().contains("mapa") ||
+        comandoEnviado.toLowerCase().contains("onde estou") ||
+        comandoEnviado.toLowerCase().contains("radar") ||
+        comandoEnviado.toLowerCase().contains("localização");
+
+    setState(() {
+      _carregando = true;
+      jarvisFalando = true;
+      _mensagensChat.add({
+        "sender": "Você",
+        "text": comandoEnviado,
+        "showRadar": false,
+      });
+    });
+
+    _textController.clear();
+
+    try {
+      final url = Uri.parse(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$_apiKey',
+      );
+
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "contents": [
+            {
+              "parts": [
+                {"text": "Aja como J.A.R.V.I.S., assistente de elite do Tony Stark. Seja polido, sarcástico e chame o usuário de Senhor. Responda em PT-BR: $comandoEnviado"},
+              ],
             },
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _textController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(hintText: 'Comando...', hintStyle: TextStyle(color: Colors.white54)),
-                  onSubmitted: _sendMessage,
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.send, color: Color(0xFF00E5FF)),
-                onPressed: () => _sendMessage(_textController.text),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
+          ],
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final aiResponse = data['candidates'][0]['content']['parts'][0]['text'];
+        setState(() {
+          _mensagensChat.add({
+            "sender": "Jarvis",
+            "text": aiResponse,
+            "showRadar": pedeRadar,
+          });
+        });
+      } else {
+        setState(() {
+          _mensagensChat.add({
+            "sender": "Jarvis",
+            "text": "Erro nos servidores centrais, Senhor.",
+            "showRadar": false,
+          });
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _mensagensChat.add({
+          "sender": "Jarvis",
+          "text": "Comando recebido e processado localmente, Senhor.",
+          "showRadar": pedeRadar,
+        });
+      });
+    } finally {
+      setState(() {
+        _carregando = false;
+        jarvisFalando = false;
+        mostrandoTeclado = false;
+      });
+    }
   }
 
-  Widget _buildTodayTab() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: const [
-        Text('PROTOCOLOS DE HOJE', style: TextStyle(color: Color(0xFF00E5FF), fontSize: 18, fontWeight: FontWeight.bold)),
-        SizedBox(height: 16),
-        ListTile(title: Text('Sincronizar APIs', style: TextStyle(color: Colors.white)), leading: Icon(Icons.check_circle, color: Color(0xFF00E5FF))),
-      ],
-    );
-  }
-
-  Widget _buildMemoryTab() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('MEMÓRIA DO JARVIS', style: TextStyle(color: Color(0xFF00E5FF), fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const SizedBox(width: 48),
+                const Text(
+                  'J.A.R.V.I.S.',
+                  style: TextStyle(
+                    color: Color(0xFFFF8C00),
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings_outlined, color: Colors.white70),
+                  onPressed: () {},
+                ),
+              ],
+            ),
+          ),
+          SizedBox(
+            width: 140,
+            height: 140,
+            child: AnimatedBuilder(
+              animation: controller,
+              builder: (context, child) => CustomPaint(
+                painter: OrbeHolograficaPainter(controller.value, jarvisFalando),
+              ),
+            ),
+          ),
           Expanded(
             child: ListView.builder(
-              itemCount: _memories.length,
+              padding: const EdgeInsets.all(16),
+              itemCount: _mensagensChat.length,
               itemBuilder: (context, index) {
-                return ListTile(
-                  title: Text(_memories[index], style: const TextStyle(color: Colors.white70)),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.redAccent),
-                    onPressed: () => _deleteMemory(index),
+                final msg = _mensagensChat[index];
+                final isUser = msg["sender"] == "Você";
+                final showRadar = msg["showRadar"] == true;
+
+                return Align(
+                  alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    padding: const EdgeInsets.all(12),
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width * 0.8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isUser ? const Color(0xFF261A0A) : const Color(0xFF120E0A),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isUser
+                            ? const Color(0xFFFF8C00).withOpacity(0.5)
+                            : const Color(0xFF332211),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          msg["sender"],
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Color(0xFFFF8C00),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          msg["text"],
+                          style: const TextStyle(color: Colors.white70, fontSize: 14),
+                        ),
+                        if (showRadar)
+                          Container(
+                            margin: const EdgeInsets.only(top: 12),
+                            height: 120,
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFFFF8C00)),
+                            ),
+                            child: const Center(
+                              child: Text(
+                                'RADAR TÁTICO ATIVO\n[Área Mapeada com Sucesso]',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Color(0xFFFF8C00), fontSize: 12),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 );
               },
             ),
           ),
+          if (_carregando)
+            const LinearProgressIndicator(
+              color: Color(0xFFFF8C00),
+              backgroundColor: Colors.transparent,
+            ),
+          if (!mostrandoTeclado) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.keyboard_outlined, color: Colors.white60, size: 28),
+                    onPressed: () => setState(() => mostrandoTeclado = true),
+                  ),
+                  const SizedBox(width: 40),
+                  GestureDetector(
+                    onTap: () => setState(() => jarvisFalando = !jarvisFalando),
+                    child: CircleAvatar(
+                      radius: 32,
+                      backgroundColor: jarvisFalando ? const Color(0xFFFF8C00) : const Color(0xFF261A0A),
+                      child: Icon(
+                        jarvisFalando ? Icons.mic_off : Icons.mic,
+                        color: jarvisFalando ? Colors.black : const Color(0xFFFF8C00),
+                        size: 30,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 40),
+                  const SizedBox(width: 28), // Espaço reservado mantendo simetria sem o X
+                ],
+              ),
+            ),
+          ] else ...[
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.keyboard_hide, color: Colors.white60),
+                    onPressed: () => setState(() => mostrandoTeclado = false),
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _textController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Comando...',
+                        hintStyle: const TextStyle(color: Colors.white38),
+                        filled: true,
+                        fillColor: const Color(0xFF120E0A),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                      ),
+                      onSubmitted: (val) => _enviarParaGemini(val),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.send, color: Color(0xFFFF8C00)),
+                    onPressed: () => _enviarParaGemini(_textController.text),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
+}
 
-  Widget _buildMapsTab() {
-    return const Center(
-      child: Text('GLOBO 3D ATIVO', style: TextStyle(color: Color(0xFF00E5FF), letterSpacing: 2, fontWeight: FontWeight.bold)),
+class TelaRadar extends StatelessWidget {
+  const TelaRadar({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text(
+              'RADAR GLOBAL TÁTICO',
+              style: TextStyle(
+                color: Color(0xFFFF8C00),
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 2.0,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.all(16.0),
+              decoration: BoxDecoration(
+                color: const Color(0xFF050301),
+                border: Border.all(
+                  color: const Color(0xFFFF8C00).withOpacity(0.5),
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.radar, size: 80, color: Color(0xFFFF8C00)),
+                    SizedBox(height: 16),
+                    Text(
+                      'VARREDURA DE SATÉLITE ATIVA',
+                      style: TextStyle(color: Colors.white, letterSpacing: 1.5, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Sistemas de geolocalização operando em modo seguro, Senhor.',
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
+}
+
+class TelaToday extends StatelessWidget {
+  const TelaToday({super.key});
+  @override
+  Widget build(BuildContext context) => const Center(
+    child: Text("PROTOCOLOS DIÁRIOS", style: TextStyle(color: Color(0xFFFF8C00), letterSpacing: 1.5)),
+  );
+}
+
+class TelaMemory extends StatelessWidget {
+  const TelaMemory({super.key});
+  @override
+  Widget build(BuildContext context) => const Center(
+    child: Text("MEMORY MATRIX", style: TextStyle(color: Color(0xFFFF8C00), letterSpacing: 1.5)),
+  );
+}
+
+class OrbeHolograficaPainter extends CustomPainter {
+  final double progress;
+  final bool isSpeaking;
+  OrbeHolograficaPainter(this.progress, this.isSpeaking);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final paint = Paint()..style = PaintingStyle.fill;
+    int dotCount = 350;
+    double baseRadius = isSpeaking ? 60.0 : 55.0;
+
+    for (int i = 0; i < dotCount; i++) {
+      double phi = math.acos(1 - 2 * (i + 0.5) / dotCount);
+      double theta = math.sqrt(dotCount * math.pi) * phi;
+      double onda =
+          math.sin((progress * math.pi * 5.0) + (i * 0.1)) *
+          (isSpeaking ? 5.0 : 1.0);
+      double raioAtual = baseRadius + onda;
+
+      double x = raioAtual * math.sin(phi) * math.cos(theta);
+      double y = raioAtual * math.sin(phi) * math.sin(theta);
+      double z = raioAtual * math.cos(phi);
+
+      double scale = 300.0 / (300.0 + z);
+      paint.color = const Color(0xFFFF8C00)
+          .withOpacity((z + baseRadius) / (baseRadius * 2.5).clamp(0.1, 0.9));
+      canvas.drawCircle(
+        Offset(center.dx + x * scale, center.dy + y * scale),
+        1.5 * scale,
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant OrbeHolograficaPainter oldDelegate) => true;
 }
