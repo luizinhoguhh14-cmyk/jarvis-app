@@ -95,7 +95,8 @@ class _TelaJarvisVoiceState extends State<TelaJarvisVoice>
   bool mostrandoTeclado = false;
   final TextEditingController _textController = TextEditingController();
 
-  final String _apiKey = String.fromEnvironment("GEMINI_API_KEY");
+  // Chave injetada via ambiente pelo Codemagic para evitar bloqueios do GitHub
+  static const String _apiKey = String.fromEnvironment("GEMINI_API_KEY");
 
   final List<Map<String, dynamic>> _mensagensChat = [
     {
@@ -333,7 +334,7 @@ class _TelaJarvisVoiceState extends State<TelaJarvisVoice>
                     ),
                   ),
                   const SizedBox(width: 40),
-                  const SizedBox(width: 28), // Espaço reservado mantendo simetria sem o X
+                  const SizedBox(width: 28),
                 ],
               ),
             ),
