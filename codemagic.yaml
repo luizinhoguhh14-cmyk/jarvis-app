@@ -1,0 +1,14 @@
+workflows:
+  android-build:
+    name: Build Android APK
+    max_build_duration: 30
+    environment:
+      flutter: stable
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Build APK com Gemini API Key
+        script: |
+          flutter build apk --release --dart-define=GEMINI_API_KEY=$GEMINI_API_KEY
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
