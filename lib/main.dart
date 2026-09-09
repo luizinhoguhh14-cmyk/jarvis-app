@@ -246,7 +246,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 11,
-                            color: isUser ? Colors.blueLight : Colors.cyanAccent,
+                            color: isUser ? Colors.lightBlue : Colors.cyanAccent,
                           ),
                         ),
                         const SizedBox(height: 4),
