@@ -13,7 +13,7 @@ class JarvisApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'JARVIS API Test',
+      title: 'JARVIS - Redundância Tripla',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
       home: const ChatScreen(),
@@ -29,11 +29,111 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  static const String _apiKey = String.fromEnvironment('GEMINI_API_KEY');
+  // Leitura das três variáveis de ambiente injetadas via Codemagic
+  static const String _geminiKey = String.fromEnvironment('GEMINI_API_KEY');
+  static const String _openAiKey = String.fromEnvironment('OPENAI_API_KEY');
+  static const String _claudeKey = String.fromEnvironment('CLAUDE_API_KEY');
+
+  static const String _jarvisPrompt = 
+      "Você é o J.A.R.V.I.S., uma inteligência artificial sofisticada, leal, polida e com tom de ironia elegante. "
+      "Trate o usuário sempre por 'Senhor'. Responda de forma direta, técnica e impecável em português.";
+
   final TextEditingController _controller = TextEditingController();
   final List<Map<String, String>> _messages = [];
   bool _loading = false;
 
+  // Chamada à API 1: Google Gemini
+  Future<String?> _callGemini(String prompt) async {
+    if (_geminiKey.isEmpty) return null;
+    try {
+      final url = Uri.parse(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=$_geminiKey',
+      );
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 6);
+      final request = await client.postUrl(url);
+      request.headers.contentType = ContentType.json;
+      request.write(jsonEncode({
+        "system_instruction": {
+          "parts": [
+            {"text": _jarvisPrompt}
+          ]
+        },
+        "contents": [
+          {
+            "parts": [
+              {"text": prompt}
+            ]
+          }
+        ]
+      }));
+
+      final response = await request.close();
+      if (response.statusCode == 200) {
+        final body = await response.transform(utf8.decoder).join();
+        final data = jsonDecode(body);
+        return data['candidates']?[0]?['content']?['parts']?[0]?['text'];
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Chamada à API 2: OpenAI (ChatGPT)
+  Future<String?> _callOpenAI(String prompt) async {
+    if (_openAiKey.isEmpty) return null;
+    try {
+      final url = Uri.parse('https://api.openai.com/v1/chat/completions');
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 6);
+      final request = await client.postUrl(url);
+      request.headers.contentType = ContentType.json;
+      request.headers.set('Authorization', 'Bearer $_openAiKey');
+      request.write(jsonEncode({
+        "model": "gpt-4o-mini",
+        "messages": [
+          {"role": "system", "content": _jarvisPrompt},
+          {"role": "user", "content": prompt}
+        ]
+      }));
+
+      final response = await request.close();
+      if (response.statusCode == 200) {
+        final body = await response.transform(utf8.decoder).join();
+        final data = jsonDecode(body);
+        return data['choices']?[0]?['message']?['content'];
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Chamada à API 3: Anthropic (Claude)
+  Future<String?> _callClaude(String prompt) async {
+    if (_claudeKey.isEmpty) return null;
+    try {
+      final url = Uri.parse('https://api.anthropic.com/v1/messages');
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 6);
+      final request = await client.postUrl(url);
+      request.headers.contentType = ContentType.json;
+      request.headers.set('x-api-key', _claudeKey);
+      request.headers.set('anthropic-version', '2023-06-01');
+      request.write(jsonEncode({
+        "model": "claude-3-5-haiku-20241022",
+        "max_tokens": 1024,
+        "system": _jarvisPrompt,
+        "messages": [
+          {"role": "user", "content": prompt}
+        ]
+      }));
+
+      final response = await request.close();
+      if (response.statusCode == 200) {
+        final body = await response.transform(utf8.decoder).join();
+        final data = jsonDecode(body);
+        return data['content']?[0]?['text'];
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Execução Sequencial do Failover (Gemini -> OpenAI -> Claude)
   Future<void> _sendMessage() async {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
@@ -44,75 +144,71 @@ class _ChatScreenState extends State<ChatScreen> {
     });
     _controller.clear();
 
-    if (_apiKey.isEmpty) {
-      setState(() {
-        _messages.add({
-          "sender": "ERRO CHAVE API",
-          "text": "GEMINI_API_KEY ausente no build do Codemagic."
-        });
-        _loading = false;
-      });
-      return;
+    String? reply;
+    String providerName = "";
+
+    // Tentativa 1: Gemini
+    reply = await _callGemini(text);
+    if (reply != null) {
+      providerName = "JARVIS (Gemini)";
+    } else {
+      // Tentativa 2: OpenAI
+      reply = await _callOpenAI(text);
+      if (reply != null) {
+        providerName = "JARVIS (OpenAI)";
+      } else {
+        // Tentativa 3: Claude
+        reply = await _callClaude(text);
+        if (reply != null) {
+          providerName = "JARVIS (Claude)";
+        }
+      }
     }
 
-    try {
-      final url = Uri.parse(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=$_apiKey',
-      );
-      final client = HttpClient();
-      final request = await client.postUrl(url);
-      request.headers.contentType = ContentType.json;
-      request.write(jsonEncode({
-        "contents": [
-          {
-            "parts": [
-              {"text": "Aja como o assistente JARVIS: $text"}
-            ]
-          }
-        ]
-      }));
-
-      final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(body);
-        final reply = data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? "Sem resposta.";
-        setState(() {
-          _messages.add({"sender": "JARVIS", "text": reply});
-        });
+    setState(() {
+      if (reply != null) {
+        _messages.add({"sender": providerName, "text": reply});
       } else {
-        setState(() {
-          _messages.add({
-            "sender": "ERRO HTTP ${response.statusCode}",
-            "text": body
-          });
+        _messages.add({
+          "sender": "ERRO DE CONTINGÊNCIA",
+          "text": "Todos os provedores (Gemini, OpenAI e Claude) falharam ou estão incomunicáveis. "
+              "Verifique o status das chaves de API e da sua conexão."
         });
       }
-    } catch (e) {
-      setState(() {
-        _messages.add({"sender": "FALHA CONEXÃO", "text": e.toString()});
-      });
-    } finally {
-      setState(() => _loading = false);
-    }
+      _loading = false;
+    });
+  }
+
+  Widget _buildKeyStatusChip(String name, bool isPresent) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isPresent ? Colors.green.shade900 : Colors.red.shade900,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        "$name: ${isPresent ? 'OK' : 'Ausente'}",
+        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('JARVIS - Teste Codemagic'),
+        title: const Text('JARVIS - Failover Triplo'),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(30),
-          child: Container(
-            color: _apiKey.isNotEmpty ? Colors.green.shade900 : Colors.red.shade900,
-            padding: const EdgeInsets.all(4),
-            child: Center(
-              child: Text(
-                _apiKey.isNotEmpty ? "Chave API injetada com sucesso!" : "Atenção: Chave API não foi repassada no build!",
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-              ),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 6.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildKeyStatusChip("Gemini", _geminiKey.isNotEmpty),
+                _buildKeyStatusChip("OpenAI", _openAiKey.isNotEmpty),
+                _buildKeyStatusChip("Claude", _claudeKey.isNotEmpty),
+              ],
             ),
           ),
         ),
@@ -126,7 +222,7 @@ class _ChatScreenState extends State<ChatScreen> {
               itemBuilder: (context, index) {
                 final msg = _messages[index];
                 final isUser = msg["sender"] == "Você";
-                final isError = msg["sender"]!.contains("ERRO") || msg["sender"]!.contains("FALHA");
+                final isError = msg["sender"]!.contains("ERRO");
 
                 return Align(
                   alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -147,7 +243,11 @@ class _ChatScreenState extends State<ChatScreen> {
                       children: [
                         Text(
                           msg["sender"]!,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            color: isUser ? Colors.blueLight : Colors.cyanAccent,
+                          ),
                         ),
                         const SizedBox(height: 4),
                         SelectableText(msg["text"]!),
@@ -167,7 +267,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   child: TextField(
                     controller: _controller,
                     decoration: const InputDecoration(
-                      hintText: 'Digite para testar a API...',
+                      hintText: 'Envie uma mensagem ao JARVIS...',
                       border: OutlineInputBorder(),
                     ),
                     onSubmitted: (_) => _sendMessage(),
