@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:io';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -95,7 +95,6 @@ class _TelaJarvisVoiceState extends State<TelaJarvisVoice>
   bool mostrandoTeclado = false;
   final TextEditingController _textController = TextEditingController();
 
-  // Chave injetada via ambiente pelo Codemagic para evitar bloqueios do GitHub
   static const String _apiKey = String.fromEnvironment("GEMINI_API_KEY");
 
   final List<Map<String, dynamic>> _mensagensChat = [
@@ -128,7 +127,7 @@ class _TelaJarvisVoiceState extends State<TelaJarvisVoice>
     if (texto.trim().isEmpty) return;
 
     final comandoEnviado = texto;
-    bool pedeRadar =
+    final bool pedeRadar =
         comandoEnviado.toLowerCase().contains("mapa") ||
         comandoEnviado.toLowerCase().contains("onde estou") ||
         comandoEnviado.toLowerCase().contains("radar") ||
@@ -151,22 +150,23 @@ class _TelaJarvisVoiceState extends State<TelaJarvisVoice>
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$_apiKey',
       );
 
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "contents": [
-            {
-              "parts": [
-                {"text": "Aja como J.A.R.V.I.S., assistente de elite do Tony Stark. Seja polido, sarcástico e chame o usuário de Senhor. Responda em PT-BR: $comandoEnviado"},
-              ],
-            },
-          ],
-        }),
-      );
+      final client = HttpClient();
+      final request = await client.postUrl(url);
+      request.headers.contentType = ContentType.json;
+      request.write(jsonEncode({
+        "contents": [
+          {
+            "parts": [
+              {"text": "Aja como J.A.R.V.I.S., assistente de elite do Tony Stark. Seja polido, sarcástico e chame o usuário de Senhor. Responda em PT-BR: $comandoEnviado"},
+            ],
+          },
+        ],
+      }));
 
+      final response = await request.close();
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        final responseBody = await response.transform(utf8.decoder).join();
+        final data = jsonDecode(responseBody);
         final aiResponse = data['candidates'][0]['content']['parts'][0]['text'];
         setState(() {
           _mensagensChat.add({
@@ -475,8 +475,8 @@ class OrbeHolograficaPainter extends CustomPainter {
       double z = raioAtual * math.cos(phi);
 
       double scale = 300.0 / (300.0 + z);
-      paint.color = const Color(0xFFFF8C00)
-          .withOpacity((z + baseRadius) / (baseRadius * 2.5).clamp(0.1, 0.9));
+      double opacity = ((z + baseRadius) / (baseRadius * 2.5)).clamp(0.1, 0.9);
+      paint.color = const Color(0xFFFF8C00).withOpacity(opacity);
       canvas.drawCircle(
         Offset(center.dx + x * scale, center.dy + y * scale),
         1.5 * scale,
