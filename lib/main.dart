@@ -45,7 +45,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_geminiKey.isEmpty) return {"success": false, "error": "Chave Gemini não configurada"};
     try {
       final url = Uri.parse(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$_geminiKey',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=$_geminiKey',
       );
       final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
       final request = await client.postUrl(url);
