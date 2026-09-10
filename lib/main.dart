@@ -13,7 +13,7 @@ class JarvisApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'JARVIS - Redundância Tripla',
+      title: 'JARVIS - Failover Triplo',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
       home: const ChatScreen(),
@@ -29,57 +29,47 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  // Leitura das três variáveis de ambiente injetadas via Codemagic
   static const String _geminiKey = String.fromEnvironment('GEMINI_API_KEY');
   static const String _openAiKey = String.fromEnvironment('OPENAI_API_KEY');
   static const String _claudeKey = String.fromEnvironment('CLAUDE_API_KEY');
 
   static const String _jarvisPrompt = 
-      "Você é o J.A.R.V.I.S., uma inteligência artificial sofisticada, leal, polida e com tom de ironia elegante. "
-      "Trate o usuário sempre por 'Senhor'. Responda de forma direta, técnica e impecável em português.";
+      "Você é o J.A.R.V.I.S., uma inteligência artificial sofisticada, leal e polida. "
+      "Trate o usuário por 'Senhor'. Responda de forma direta e técnica em português.";
 
   final TextEditingController _controller = TextEditingController();
   final List<Map<String, String>> _messages = [];
   bool _loading = false;
 
-  // Chamada à API 1: Google Gemini
-  Future<String?> _callGemini(String prompt) async {
-    if (_geminiKey.isEmpty) return null;
+  Future<Map<String, dynamic>> _callGemini(String prompt) async {
+    if (_geminiKey.isEmpty) return {"success": false, "error": "Chave Gemini não configurada"};
     try {
       final url = Uri.parse(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=$_geminiKey',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$_geminiKey',
       );
       final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
       final request = await client.postUrl(url);
       request.headers.contentType = ContentType.json;
       request.write(jsonEncode({
-        "system_instruction": {
-          "parts": [
-            {"text": _jarvisPrompt}
-          ]
-        },
-        "contents": [
-          {
-            "parts": [
-              {"text": prompt}
-            ]
-          }
-        ]
+        "system_instruction": {"parts": [{"text": _jarvisPrompt}]},
+        "contents": [{"parts": [{"text": prompt}]}]
       }));
 
       final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
       if (response.statusCode == 200) {
-        final body = await response.transform(utf8.decoder).join();
         final data = jsonDecode(body);
-        return data['candidates']?[0]?['content']?['parts']?[0]?['text'];
+        final text = data['candidates']?[0]?['content']?['parts']?[0]?['text'];
+        if (text != null) return {"success": true, "text": text};
       }
-    } catch (_) {}
-    return null;
+      return {"success": false, "error": "Gemini HTTP ${response.statusCode}: $body"};
+    } catch (e) {
+      return {"success": false, "error": "Gemini Exceção: $e"};
+    }
   }
 
-  // Chamada à API 2: OpenAI (ChatGPT)
-  Future<String?> _callOpenAI(String prompt) async {
-    if (_openAiKey.isEmpty) return null;
+  Future<Map<String, dynamic>> _callOpenAI(String prompt) async {
+    if (_openAiKey.isEmpty) return {"success": false, "error": "Chave OpenAI não configurada"};
     try {
       final url = Uri.parse('https://api.openai.com/v1/chat/completions');
       final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
@@ -95,18 +85,20 @@ class _ChatScreenState extends State<ChatScreen> {
       }));
 
       final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
       if (response.statusCode == 200) {
-        final body = await response.transform(utf8.decoder).join();
         final data = jsonDecode(body);
-        return data['choices']?[0]?['message']?['content'];
+        final text = data['choices']?[0]?['message']?['content'];
+        if (text != null) return {"success": true, "text": text};
       }
-    } catch (_) {}
-    return null;
+      return {"success": false, "error": "OpenAI HTTP ${response.statusCode}: $body"};
+    } catch (e) {
+      return {"success": false, "error": "OpenAI Exceção: $e"};
+    }
   }
 
-  // Chamada à API 3: Anthropic (Claude)
-  Future<String?> _callClaude(String prompt) async {
-    if (_claudeKey.isEmpty) return null;
+  Future<Map<String, dynamic>> _callClaude(String prompt) async {
+    if (_claudeKey.isEmpty) return {"success": false, "error": "Chave Claude não configurada"};
     try {
       final url = Uri.parse('https://api.anthropic.com/v1/messages');
       final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
@@ -118,22 +110,22 @@ class _ChatScreenState extends State<ChatScreen> {
         "model": "claude-3-5-haiku-20241022",
         "max_tokens": 1024,
         "system": _jarvisPrompt,
-        "messages": [
-          {"role": "user", "content": prompt}
-        ]
+        "messages": [{"role": "user", "content": prompt}]
       }));
 
       final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
       if (response.statusCode == 200) {
-        final body = await response.transform(utf8.decoder).join();
         final data = jsonDecode(body);
-        return data['content']?[0]?['text'];
+        final text = data['content']?[0]?['text'];
+        if (text != null) return {"success": true, "text": text};
       }
-    } catch (_) {}
-    return null;
+      return {"success": false, "error": "Claude HTTP ${response.statusCode}: $body"};
+    } catch (e) {
+      return {"success": false, "error": "Claude Exceção: $e"};
+    }
   }
 
-  // Execução Sequencial do Failover (Gemini -> OpenAI -> Claude)
   Future<void> _sendMessage() async {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
@@ -144,37 +136,45 @@ class _ChatScreenState extends State<ChatScreen> {
     });
     _controller.clear();
 
-    String? reply;
-    String providerName = "";
+    List<String> logs = [];
 
-    // Tentativa 1: Gemini
-    reply = await _callGemini(text);
-    if (reply != null) {
-      providerName = "JARVIS (Gemini)";
-    } else {
-      // Tentativa 2: OpenAI
-      reply = await _callOpenAI(text);
-      if (reply != null) {
-        providerName = "JARVIS (OpenAI)";
-      } else {
-        // Tentativa 3: Claude
-        reply = await _callClaude(text);
-        if (reply != null) {
-          providerName = "JARVIS (Claude)";
-        }
-      }
+    // 1. Gemini
+    final resGemini = await _callGemini(text);
+    if (resGemini["success"] == true) {
+      _addReply("JARVIS (Gemini)", resGemini["text"]);
+      return;
     }
+    logs.add(resGemini["error"]);
 
+    // 2. OpenAI
+    final resOpenAI = await _callOpenAI(text);
+    if (resOpenAI["success"] == true) {
+      _addReply("JARVIS (OpenAI)", resOpenAI["text"]);
+      return;
+    }
+    logs.add(resOpenAI["error"]);
+
+    // 3. Claude
+    final resClaude = await _callClaude(text);
+    if (resClaude["success"] == true) {
+      _addReply("JARVIS (Claude)", resClaude["text"]);
+      return;
+    }
+    logs.add(resClaude["error"]);
+
+    // Se todos falharem, exibe os relatórios de diagnóstico
     setState(() {
-      if (reply != null) {
-        _messages.add({"sender": providerName, "text": reply});
-      } else {
-        _messages.add({
-          "sender": "ERRO DE CONTINGÊNCIA",
-          "text": "Todos os provedores (Gemini, OpenAI e Claude) falharam ou estão incomunicáveis. "
-              "Verifique o status das chaves de API e da sua conexão."
-        });
-      }
+      _messages.add({
+        "sender": "DIAGNOSTICO DE FALHA",
+        "text": "Todos os provedores falharam:\n\n" + logs.join("\n\n")
+      });
+      _loading = false;
+    });
+  }
+
+  void _addReply(String sender, String text) {
+    setState(() {
+      _messages.add({"sender": sender, "text": text});
       _loading = false;
     });
   }
@@ -222,7 +222,7 @@ class _ChatScreenState extends State<ChatScreen> {
               itemBuilder: (context, index) {
                 final msg = _messages[index];
                 final isUser = msg["sender"] == "Você";
-                final isError = msg["sender"]!.contains("ERRO");
+                final isError = msg["sender"]!.contains("DIAGNOSTICO");
 
                 return Align(
                   alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
