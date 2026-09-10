@@ -49,7 +49,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final url = Uri.parse(
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=$_geminiKey',
       );
-      final client = HttpClient()..connectionTimeout = const Duration(seconds: 6);
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
       final request = await client.postUrl(url);
       request.headers.contentType = ContentType.json;
       request.write(jsonEncode({
@@ -82,7 +82,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_openAiKey.isEmpty) return null;
     try {
       final url = Uri.parse('https://api.openai.com/v1/chat/completions');
-      final client = HttpClient()..connectionTimeout = const Duration(seconds: 6);
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
       final request = await client.postUrl(url);
       request.headers.contentType = ContentType.json;
       request.headers.set('Authorization', 'Bearer $_openAiKey');
@@ -109,7 +109,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_claudeKey.isEmpty) return null;
     try {
       final url = Uri.parse('https://api.anthropic.com/v1/messages');
-      final client = HttpClient()..connectionTimeout = const Duration(seconds: 6);
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
       final request = await client.postUrl(url);
       request.headers.contentType = ContentType.json;
       request.headers.set('x-api-key', _claudeKey);
