@@ -7,10 +7,3 @@ allprojects {
 
 rootProject.buildDir = '../build'
 
-subprojects {
-    tasks.configureEach { task ->
-        if (task.name.contains('Metadata')) {
-            enabled = false
-        }
-    }
-}
