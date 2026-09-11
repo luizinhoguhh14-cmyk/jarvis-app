@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace "com.example.jarvis_core"
-    compileSdkVersion 35
+    compileSdk 35
     ndkVersion flutter.ndkVersion
 
     compileOptions {
@@ -21,7 +21,7 @@ android {
     defaultConfig {
         applicationId "com.example.jarvis_core"
         minSdk 21
-    targetSdkVersion 35
+    targetSdk 35
         versionCode 1
         versionName "1.0"
     }
