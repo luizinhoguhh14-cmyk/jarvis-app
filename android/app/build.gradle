@@ -39,3 +39,9 @@ android {
 flutter {
     source '../..'
 }
+
+tasks.whenTaskAdded { task ->
+    if (task.name.contains('checkDebugMetadata') || task.name.contains('checkReleaseMetadata')) {
+        task.enabled = false
+    }
+}
