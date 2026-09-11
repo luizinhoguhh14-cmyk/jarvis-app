@@ -19,3 +19,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+dependency_overrides:
+  file_picker: ^8.1.4
