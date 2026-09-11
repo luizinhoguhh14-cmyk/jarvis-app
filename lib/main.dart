@@ -39,7 +39,6 @@ class JarvisMark4App extends StatelessWidget {
   @override
   State<NavegacaoPrincipal> createState() => _NavegacaoPrincipalState();
 }
-}
 
 class _NavegacaoPrincipalState extends State<NavegacaoPrincipal> {
   int _indiceAtual = 0;
