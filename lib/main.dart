@@ -32,8 +32,7 @@ class JarvisMark4App extends StatelessWidget {
   }
 }
 
-class NavegacaoPrincipal extends StatefulWidget {
-  const NavegacaoPrincipal({super.key});
+);
 
   @override
   State<NavegacaoPrincipal> createState() => _NavegacaoPrincipalState();
