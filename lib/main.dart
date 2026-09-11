@@ -27,7 +27,7 @@ class JarvisMark4App extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFF09090B),
         fontFamily: 'Roboto',
       ),
-      home: const NavegacaoPrincipal(),
+      home: NavegacaoPrincipal(),
     );
   }
 }
