@@ -11,28 +11,22 @@ val newBuildDir: Directory =
         .get()
 rootProject.layout.buildDirectory.value(newBuildDir)
 
-subprojects {
-    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
-    project.layout.buildDirectory.value(newSubprojectBuildDir)
-}
-subprojects {
-    project.evaluationDependsOn(":app")
-}
-
-tasks.register<Delete>("clean") {
-    delete(rootProject.layout.buildDirectory)
-}
 
 
 subprojects {
     afterEvaluate {
-        val android = project.extensions.findByName("android")
-        if (android != null) {
+        val androidExt = extensions.findByName("android")
+        if (androidExt != null) {
             try {
-                val method = android.javaClass.getMethod("compileSdkVersion", Int::class.javaPrimitiveType)
-                method.invoke(android, 36)
+                // Forca o SDK 36 no AGP 8+
+                val method = androidExt.javaClass.getMethod("setCompileSdk", java.lang.Integer::class.java)
+                method.invoke(androidExt, 36)
             } catch (e: Exception) {
-                // ignora se nao for modulo android
+                try {
+                    // Forca o SDK 36 em versoes anteriores
+                    val method2 = androidExt.javaClass.getMethod("setCompileSdkVersion", Int::class.javaPrimitiveType)
+                    method2.invoke(androidExt, 36)
+                } catch (e2: Exception) {}
             }
         }
     }
