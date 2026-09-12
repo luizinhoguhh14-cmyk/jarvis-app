@@ -5,29 +5,18 @@ allprojects {
     }
 }
 
-val newBuildDir: Directory =
-    rootProject.layout.buildDirectory
-        .dir("../../build")
-        .get()
+val newBuildDir: Directory = rootProject.layout.buildDirectory.dir("../../build").get()
 rootProject.layout.buildDirectory.value(newBuildDir)
 
-
+subprojects {
+    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
+    project.layout.buildDirectory.value(newSubprojectBuildDir)
+}
 
 subprojects {
-    afterEvaluate {
-        val androidExt = extensions.findByName("android")
-        if (androidExt != null) {
-            try {
-                // Forca o SDK 36 no AGP 8+
-                val method = androidExt.javaClass.getMethod("setCompileSdk", java.lang.Integer::class.java)
-                method.invoke(androidExt, 34)
-            } catch (e: Exception) {
-                try {
-                    // Forca o SDK 36 em versoes anteriores
-                    val method2 = androidExt.javaClass.getMethod("setCompileSdkVersion", Int::class.javaPrimitiveType)
-                    method2.invoke(androidExt, 34)
-                } catch (e2: Exception) {}
-            }
-        }
-    }
+    project.evaluationDependsOn(":app")
+}
+
+tasks.register<Delete>("clean") {
+    delete(rootProject.layout.buildDirectory)
 }
