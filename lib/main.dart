@@ -1,650 +1,517 @@
 import 'dart:convert';
-import 'dart:io';
-import 'dart:math' as math;
+import 'dart:math';
+import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:table_calendar/table_calendar.dart';
+import 'package:http/http.dart' as http;
 import 'package:audioplayers/audioplayers.dart';
-import 'package:file_picker/file_picker.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  runApp(const JarvisMark4App());
+  runApp(const JarvisApp());
 }
 
-// Variável Global de Estado para a Cor da Orbe
-final ValueNotifier<Color> orbeColorNotifier = ValueNotifier(const Color(0xFFE0E0E0)); // Cor inicial "branca/cinza clara" da referência
-
-class JarvisMark4App extends StatelessWidget {
-  const JarvisMark4App({super.key});
+class JarvisApp extends StatelessWidget {
+  const JarvisApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'JARVIS',
+      title: 'JARVIS AI',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF09090B),
-        fontFamily: 'Roboto',
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF0B0E14),
+        primaryColor: Colors.cyanAccent,
       ),
-      home: NavegacaoPrincipal(),
+      home: const HomeScreen(),
     );
   }
 }
 
-
-  class NavegacaoPrincipal extends StatefulWidget {
-  const NavegacaoPrincipal({super.key});
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
 
   @override
-  State<NavegacaoPrincipal> createState() => _NavegacaoPrincipalState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _NavegacaoPrincipalState extends State<NavegacaoPrincipal> {
-  int _indiceAtual = 0;
+class _HomeScreenState extends State<HomeScreen> {
+  int _currentIndex = 0;
 
-  final List<Widget> _telas = [
-    const TelaJarvisPrincipal(),
-    const TelaToday(),
-    const TelaMemory(),
+  final List<Widget> _pages = const [
+    JarvisTab(),
+    TodayTab(),
+    MemoryTab(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _telas[_indiceAtual],
+      resizeToAvoidBottomInset: true,
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _pages,
+      ),
       bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: const Color(0xFF09090B),
-        currentIndex: _indiceAtual,
-        selectedItemColor: const Color(0xFF00E5FF),
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: const Color(0xFF121824),
+        selectedItemColor: Colors.cyanAccent,
         unselectedItemColor: Colors.white38,
-        selectedFontSize: 11,
-        unselectedFontSize: 11,
-        onTap: (index) {
-          setState(() {
-            _indiceAtual = index;
-          });
-        },
         items: const [
-          BottomNavigationBarItem(
-            icon: Padding(padding: EdgeInsets.only(bottom: 4.0), child: Icon(Icons.hexagon_outlined)),
-            label: 'JARVIS',
-          ),
-          BottomNavigationBarItem(
-            icon: Padding(padding: EdgeInsets.only(bottom: 4.0), child: Icon(Icons.view_list_rounded)),
-            label: 'Today',
-          ),
-          BottomNavigationBarItem(
-            icon: Padding(padding: EdgeInsets.only(bottom: 4.0), child: Icon(Icons.calendar_month)),
-            label: 'Memory',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.psychology), label: 'Jarvis'),
+          BottomNavigationBarItem(icon: Icon(Icons.today), label: 'Hoje'),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Memória'),
         ],
       ),
     );
   }
 }
 
-// --- TELA JARVIS PRINCIPAL (Com Controle de Interface 1 e 2) ---
-class TelaJarvisPrincipal extends StatefulWidget {
-  const TelaJarvisPrincipal({super.key});
+class FishAudioService {
+  final String apiKey;
+  final String referenceId;
+  final AudioPlayer _audioPlayer = AudioPlayer();
 
-  @override
-  State<TelaJarvisPrincipal> createState() => _TelaJarvisPrincipalState();
+  FishAudioService({
+    this.apiKey = 'sk-fish-_b2ElwmkHha1WSkJDdXMqN0YBdY9u82r0ANBLWLeewM',
+    this.referenceId = '69a0b1c2f7e2433dabac4413ba0a56d7',
+  });
+
+  Future<void> falar(String texto, Function(bool) onSpeakingStateChanged) async {
+    try {
+      onSpeakingStateChanged(true);
+      final response = await http.post(
+        Uri.parse('https://api.fish.audio/v1/tts'),
+        headers: {
+          'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'text': texto,
+          'reference_id': referenceId,
+          'format': 'mp3',
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        await _audioPlayer.stop();
+        await _audioPlayer.play(BytesSource(response.bodyBytes));
+        _audioPlayer.onPlayerComplete.listen((_) {
+          onSpeakingStateChanged(false);
+        });
+      } else {
+        onSpeakingStateChanged(false);
+      }
+    } catch (e) {
+      onSpeakingStateChanged(false);
+    }
+  }
 }
 
-class _TelaJarvisPrincipalState extends State<TelaJarvisPrincipal> with SingleTickerProviderStateMixin {
-  late AnimationController _orbeController;
-  
-  // Controle de Estado da Interface
-  bool _isChatInterface = false; // False = Tela Inicial (Ref 1), True = Tela de Chat (Ref 4)
+class OrbeParticulasPainter extends CustomPainter {
+  final double progress;
+  final bool isSpeaking;
+
+  OrbeParticulasPainter({required this.progress, required this.isSpeaking});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+    final random = Random(42);
+
+    final paintPoint = Paint()
+      ..color = Colors.cyanAccent.withOpacity(0.8)
+      ..style = PaintingStyle.fill;
+
+    int totalParticulas = 140;
+
+    for (int i = 0; i < totalParticulas; i++) {
+      double angle = (i / totalParticulas) * 2 * pi;
+      double distanceRatio = random.nextDouble();
+
+      double noise = isSpeaking 
+          ? (sin(progress * 2 * pi * 4 + i) * 12.0) 
+          : (sin(progress * 2 * pi + i) * 3.0);
+
+      double r = (radius * distanceRatio) + noise;
+      double x = center.dx + r * cos(angle + (isSpeaking ? progress * pi : 0));
+      double y = center.dy + r * sin(angle + (isSpeaking ? progress * pi : 0));
+
+      double pointRadius = isSpeaking ? (1.5 + random.nextDouble() * 2.5) : 1.8;
+      canvas.drawCircle(Offset(x, y), pointRadius, paintPoint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant OrbeParticulasPainter oldDelegate) => true;
+}
+
+// --- ABA 1: JARVIS COM CONFIGURAÇÕES NO HUD ---
+class JarvisTab extends StatefulWidget {
+  const JarvisTab({super.key});
+
+  @override
+  State<JarvisTab> createState() => _JarvisTabState();
+}
+
+class _JarvisTabState extends State<JarvisTab> with SingleTickerProviderStateMixin {
+  final TextEditingController _controller = TextEditingController();
+  final List<Map<String, String>> _messages = [];
+  final String _apiKey = "SUA_CHAVE_DE_API_DO_GEMINI_AQUI"; 
+  final FishAudioService _fishAudio = FishAudioService();
+
+  late AnimationController _animController;
+  bool _isLoading = false;
   bool _isSpeaking = false;
-  bool _isLoadingText = false;
-  
-  // Histórico
-  final List<Map<String, String>> _historicoConversa = [];
-  final TextEditingController _textController = TextEditingController();
-
-  // APIs (Codemagic)
-  static const String _geminiKey = String.fromEnvironment('GEMINI_API_KEY');
-  static const String _groqKey = String.fromEnvironment('GROQ_API_KEY');
-  static const String _fishAudioKey = String.fromEnvironment('FISH_AUDIO_KEY'); 
-  static const String _fishVoiceId = "69a0b1c2f7e2433dabac4413ba0a56d7";
-
-  final AudioPlayer _audioPlayer = AudioPlayer();
 
   @override
   void initState() {
     super.initState();
-    _orbeController = AnimationController(duration: const Duration(seconds: 12), vsync: this)..repeat();
-    
-    // Configura o evento para quando o áudio terminar de tocar, a orbe parar de vibrar
-    _audioPlayer.onPlayerComplete.listen((_) {
-      if (mounted) setState(() => _isSpeaking = false);
-    });
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    )..repeat();
   }
 
   @override
   void dispose() {
-    _orbeController.dispose();
-    _audioPlayer.dispose();
-    _textController.dispose();
+    _animController.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
-  String _getGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return "Bom dia, Senhor.";
-    if (hour < 18) return "Boa tarde, Senhor.";
-    return "Boa noite, Senhor.";
-  }
-
-  // Lógica de Comunicação (Gemini -> Groq -> Fish Audio)
-  Future<void> _sendMessage(String text) async {
-    if (text.isEmpty) return;
-
-    setState(() {
-      _historicoConversa.insert(0, {"sender": "Você", "text": text});
-      _isLoadingText = true;
-      _isChatInterface = true; // Força ida para a tela de chat
-    });
-    _textController.clear();
-
-    String? replyText;
-
-    // 1. Tenta Gemini
-    replyText = await _callAPI(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=$_geminiKey',
-      {
-        "system_instruction": {"parts": [{"text": "Você é o J.A.R.V.I.S., IA polida e eficiente. Responda em português. Seja breve."}]},
-        "contents": [{"parts": [{"text": text}]}]
-      },
-      (data) => data['candidates']?[0]?['content']?['parts']?[0]?['text'],
-    );
-
-    // 2. Se falhar, tenta Groq (Llama 3)
-    if (replyText == null && _groqKey.isNotEmpty) {
-      replyText = await _callAPI(
-        'https://api.groq.com/openai/v1/chat/completions',
-        {
-          "model": "llama3-70b-8192",
-          "messages": [
-            {"role": "system", "content": "Você é o J.A.R.V.I.S., IA polida e eficiente. Responda em português."},
-            {"role": "user", "content": text}
-          ]
-        },
-        (data) => data['choices']?[0]?['message']?['content'],
-        headers: {'Authorization': 'Bearer $_groqKey'},
-      );
-    }
-
-    if (replyText == null) replyText = "Falha de conexão nos satélites, Senhor.";
-
-    setState(() {
-      _historicoConversa.insert(0, {"sender": "JARVIS", "text": replyText!});
-      _isLoadingText = false;
-    });
-
-    // 3. Gera Áudio com Fish Audio
-    await _generateAndPlayAudio(replyText);
-  }
-
-  Future<String?> _callAPI(String url, Map body, String? Function(dynamic) extract, {Map<String, String>? headers}) async {
-    try {
-      final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
-      final request = await client.postUrl(Uri.parse(url));
-      request.headers.contentType = ContentType.json;
-      headers?.forEach((k, v) => request.headers.set(k, v));
-      request.write(jsonEncode(body));
-      final response = await request.close();
-      if (response.statusCode == 200) {
-        final resBody = await response.transform(utf8.decoder).join();
-        return extract(jsonDecode(resBody));
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  Future<void> _generateAndPlayAudio(String text) async {
-    if (_fishAudioKey.isEmpty) return;
-    try {
-      setState(() => _isSpeaking = true); // Orbe começa a vibrar aleatoriamente
-      final client = HttpClient();
-      final request = await client.postUrl(Uri.parse('https://api.fish.audio/v1/tts'));
-      request.headers.contentType = ContentType.json;
-      request.headers.set('Authorization', 'Bearer $_fishAudioKey');
-      request.write(jsonEncode({
-        "text": text,
-        "reference_id": _fishVoiceId,
-        "format": "mp3"
-      }));
-
-      final response = await request.close();
-      if (response.statusCode == 200) {
-        // Para simplificar no protótipo, salvamos em arquivo temporário e tocamos
-        final directory = Directory.systemTemp;
-        final file = File('${directory.path}/jarvis_reply.mp3');
-        final bytes = await response.expand((b) => b).toList();
-        await file.writeAsBytes(bytes);
-        await _audioPlayer.play(DeviceFileSource(file.path));
-      } else {
-        setState(() => _isSpeaking = false);
-      }
-    } catch (_) {
-      setState(() => _isSpeaking = false);
-    }
-  }
-
-  // --- Função para selecionar Arquivos (Botão +) ---
-  void _abrirAnexos() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles();
-    if (result != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Arquivo carregado: ${result.files.single.name}')));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Stack(
-        children: [
-          // CABEÇALHO COMUM (Relógio e Engrenagem)
-          Positioned(
-            top: 10, left: 16, right: 16,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.access_time, color: Colors.white70),
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TelaHistorico())),
-                ),
-                const Text('Jarvis', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                IconButton(
-                  icon: const Icon(Icons.settings_outlined, color: Colors.white70),
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TelaConfiguracoes())),
-                ),
-              ],
-            ),
-          ),
-
-          // CONTEÚDO PRINCIPAL (Muda entre Inicial e Chat)
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 400),
-            child: _isChatInterface ? _buildChatInterface() : _buildPrimeiraInterface(),
-          ),
-        ],
+  void _openSettingsModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF121824),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-    );
-  }
-
-  // --- TELA INICIAL (Referência: Primeira Interface) ---
-  Widget _buildPrimeiraInterface() {
-    return Column(
-      key: const ValueKey('PrimeiraInterface'),
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const SizedBox(height: 80),
-        SizedBox(
-          width: 250, height: 250,
-          child: ValueListenableBuilder<Color>(
-            valueListenable: orbeColorNotifier,
-            builder: (context, color, child) {
-              return AnimatedBuilder(
-                animation: _orbeController,
-                builder: (context, child) => CustomPaint(painter: OrbeHolograficaPainter(_orbeController.value, _isSpeaking, color)),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 40),
-        Text(_getGreeting(), style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 10),
-        const Text('Conte algo para eu lembrar sobre você', style: TextStyle(color: Colors.white54, fontSize: 14)),
-        const SizedBox(height: 30),
-        const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('Diga o que construir a seguir', style: TextStyle(color: Colors.white60, fontSize: 12)),
-            SizedBox(width: 10),
-            Text('·  Agora não  ·', style: TextStyle(color: Colors.white38, fontSize: 12)),
-          ],
-        ),
-        const SizedBox(height: 5),
-        const Text('Não perguntar de novo', style: TextStyle(color: Colors.white38, fontSize: 12)),
-        const Spacer(),
-        IconButton(
-          icon: const Icon(Icons.keyboard_outlined, color: Colors.white60),
-          onPressed: () => setState(() => _isChatInterface = true),
-        ),
-        const SizedBox(height: 20),
-      ],
-    );
-  }
-
-  // --- TELA DE CHAT (Referência: Interface Principal / Ativa) ---
-  Widget _buildChatInterface() {
-    return Column(
-      key: const ValueKey('ChatInterface'),
-      children: [
-        const SizedBox(height: 60),
-        // Orbe Menor no topo
-        SizedBox(
-          width: 100, height: 100,
-          child: ValueListenableBuilder<Color>(
-            valueListenable: orbeColorNotifier,
-            builder: (context, color, child) {
-              return AnimatedBuilder(
-                animation: _orbeController,
-                builder: (context, child) => CustomPaint(painter: OrbeHolograficaPainter(_orbeController.value, _isSpeaking, color)),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 10),
-        Text(_isSpeaking ? 'Falando...' : (_isLoadingText ? 'Processando...' : '•••• Ouvindo... ••••'), 
-             style: const TextStyle(color: Colors.white54, fontSize: 12)),
-        
-        // Área do Histórico de Chat
-        Expanded(
-          child: ListView.builder(
-            reverse: true,
-            padding: const EdgeInsets.all(20),
-            itemCount: _historicoConversa.length,
-            itemBuilder: (context, index) {
-              final msg = _historicoConversa[index];
-              final isUser = msg["sender"] == "Você";
-              return Container(
-                margin: const EdgeInsets.symmetric(vertical: 8),
-                alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: isUser ? const Color(0xFF1E1E24) : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(msg["text"]!, style: TextStyle(color: isUser ? Colors.white : Colors.white70)),
-                ),
-              );
-            },
-          ),
-        ),
-        
-        // Barra Inferior de Digitação (Referência: Interface Principal Baixo)
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: const BoxDecoration(color: Color(0xFF09090B)),
-          child: Row(
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                decoration: const BoxDecoration(color: Color(0xFF1a1a20), shape: BoxShape.circle),
-                child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white70),
-                  onPressed: () => setState(() => _isChatInterface = false), // Volta para tela inicial
-                ),
+              const Text('CONFIGURAÇÕES DO SISTEMA', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 15),
+              ListTile(
+                leading: const Icon(Icons.key, color: Colors.cyanAccent),
+                title: const Text('Chaves de API'),
+                subtitle: const Text('Gemini & Fish Audio'),
+                onTap: () {},
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: _textController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: 'Mensagem...',
-                    hintStyle: const TextStyle(color: Colors.white38),
-                    filled: true,
-                    fillColor: const Color(0xFF1a1a20),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
-                    prefixIcon: IconButton(icon: const Icon(Icons.add, color: Colors.white54), onPressed: _abrirAnexos), // Botão +
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.send, color: Colors.white54),
-                      onPressed: () => _sendMessage(_textController.text),
-                    ),
-                  ),
-                  onSubmitted: _sendMessage,
-                ),
+              ListTile(
+                leading: const Icon(Icons.record_voice_over, color: Colors.cyanAccent),
+                title: const Text('Voz do JARVIS'),
+                subtitle: const Text('ID de referência configurado'),
+                onTap: () {},
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_sweep, color: Colors.redAccent),
+                title: const Text('Limpar Histórico de Chat', style: TextStyle(color: Colors.redAccent)),
+                onTap: () {
+                  setState(() => _messages.clear());
+                  Navigator.pop(context);
+                },
               ),
             ],
           ),
-        ),
-      ],
+        );
+      },
     );
   }
-}
 
-// --- TELA DE HISTÓRICO ---
-class TelaHistorico extends StatelessWidget {
-  const TelaHistorico({super.key});
+  Future<void> _sendMessage() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF09090B),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: const Text('Histórico', style: TextStyle(fontWeight: FontWeight.bold)),
-        centerTitle: true,
-        actions: [IconButton(icon: const Icon(Icons.search), onPressed: () {})],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: const [
-          Text('ONTEM', style: TextStyle(color: Colors.white38, fontSize: 12, letterSpacing: 1.2)),
-          ListTile(title: Text('Relatório de sistemas', style: TextStyle(color: Colors.white)), subtitle: Text('1d ago · 2 turns', style: TextStyle(color: Colors.white38))),
-          Divider(color: Colors.white10),
-          SizedBox(height: 20),
-          Text('ESTA SEMANA', style: TextStyle(color: Colors.white38, fontSize: 12, letterSpacing: 1.2)),
-          ListTile(title: Text('Configurações da Mark 4', style: TextStyle(color: Colors.white)), subtitle: Text('3d ago · 8 turns', style: TextStyle(color: Colors.white38))),
-        ],
-      ),
-    );
+    setState(() {
+      _messages.add({"sender": "user", "text": text});
+      _isLoading = true;
+    });
+    _controller.clear();
+
+    try {
+      final url = Uri.parse(
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$_apiKey');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "contents": [
+            {
+              "parts": [
+                {"text": text}
+              ]
+            }
+          ]
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final reply = data['candidates'][0]['content']['parts'][0]['text'];
+        setState(() {
+          _messages.add({"sender": "jarvis", "text": reply});
+        });
+        
+        _fishAudio.falar(reply, (speaking) {
+          setState(() {
+            _isSpeaking = speaking;
+          });
+        });
+
+      } else {
+        setState(() {
+          _messages.add({"sender": "jarvis", "text": "Erro no sistema de resposta."});
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _messages.add({"sender": "jarvis", "text": "Falha de conexão: $e"});
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
-}
 
-// --- TELA DE CONFIGURAÇÕES (Engrenagem) ---
-class TelaConfiguracoes extends StatelessWidget {
-  const TelaConfiguracoes({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF09090B),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: const Text('Aparência', style: TextStyle(fontWeight: FontWeight.bold)),
-        centerTitle: true,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Predefinições de Cor da Orbe', style: TextStyle(color: Colors.white70, fontSize: 14)),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+  Widget _buildHudButton(IconData icon, String label, {VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.cyanAccent.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
+            ),
+            child: Row(
               children: [
-                _buildColorSelector(context, const Color(0xFFE0E0E0)), // Branco/Cinza Original
-                _buildColorSelector(context, const Color(0xFF00E5FF)), // Ciano
-                _buildColorSelector(context, const Color(0xFFFF3366)), // Vermelho/Rosa
-                _buildColorSelector(context, const Color(0xFF6633FF)), // Roxo
-                _buildColorSelector(context, const Color(0xFFFFCC00)), // Dourado
+                Icon(icon, color: Colors.cyanAccent, size: 16),
+                const SizedBox(width: 4),
+                Text(label, style: const TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold)),
               ],
             ),
-            const SizedBox(height: 40),
-            const Text('Futuras atualizações poderão incluir:', style: TextStyle(color: Colors.white38, fontSize: 12)),
-            const ListTile(leading: Icon(Icons.speed, color: Colors.white54), title: Text('Velocidade da Voz', style: TextStyle(color: Colors.white54))),
-            const ListTile(leading: Icon(Icons.memory, color: Colors.white54), title: Text('Limite de Memória (Contexto)', style: TextStyle(color: Colors.white54))),
-          ],
+          ),
         ),
       ),
     );
   }
-
-  Widget _buildColorSelector(BuildContext context, Color color) {
-    return GestureDetector(
-      onTap: () {
-        orbeColorNotifier.value = color; // Altera a cor globalmente
-        Navigator.pop(context);
-      },
-      child: Container(
-        width: 40, height: 40,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle, border: Border.all(color: Colors.white24, width: 2)),
-      ),
-    );
-  }
-}
-
-// --- ABA MEMORY (Calendário) ---
-class TelaMemory extends StatefulWidget {
-  const TelaMemory({super.key});
-  @override
-  State<TelaMemory> createState() => _TelaMemoryState();
-}
-
-class _TelaMemoryState extends State<TelaMemory> {
-  DateTime _focusedDay = DateTime.now();
-  DateTime? _selectedDay;
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
       child: Column(
         children: [
-          const Padding(
-            padding: EdgeInsets.all(16.0),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Icon(Icons.menu, color: Colors.white),
-                SizedBox(width: 10),
-                Text('Aba Memory', style: TextStyle(color: Colors.redAccent, fontSize: 20, fontWeight: FontWeight.bold)),
-                Spacer(),
-                Icon(Icons.search, color: Colors.white),
+                _buildHudButton(Icons.memory, "SYS: 98%"),
+                _buildHudButton(Icons.shield, "DEFENSE"),
+                _buildHudButton(Icons.settings, "CONFIG", onTap: _openSettingsModal),
               ],
             ),
           ),
-          TableCalendar(
-            firstDay: DateTime.utc(2026, 1, 1),
-            lastDay: DateTime.utc(2030, 12, 31),
-            focusedDay: _focusedDay,
-            selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-            onDaySelected: (selectedDay, focusedDay) {
-              setState(() {
-                _selectedDay = selectedDay;
-                _focusedDay = focusedDay;
-              });
+          
+          const SizedBox(height: 10),
+
+          AnimatedBuilder(
+            animation: _animController,
+            builder: (context, child) {
+              return CustomPaint(
+                size: const Size(130, 130),
+                painter: OrbeParticulasPainter(
+                  progress: _animController.value,
+                  isSpeaking: _isSpeaking,
+                ),
+              );
             },
-            calendarStyle: const CalendarStyle(
-              defaultTextStyle: TextStyle(color: Colors.white),
-              weekendTextStyle: TextStyle(color: Colors.redAccent),
-              selectedDecoration: BoxDecoration(color: Colors.blueGrey, shape: BoxShape.rectangle),
-              todayDecoration: BoxDecoration(color: Colors.transparent, shape: BoxShape.rectangle, border: Border.fromBorderSide(BorderSide(color: Colors.white38))),
-            ),
-            headerStyle: const HeaderStyle(
-              formatButtonVisible: false,
-              titleCentered: true,
-              titleTextStyle: TextStyle(color: Colors.white, fontSize: 18),
-              leftChevronIcon: Icon(Icons.chevron_left, color: Colors.white),
-              rightChevronIcon: Icon(Icons.chevron_right, color: Colors.white),
+          ),
+          
+          const SizedBox(height: 8),
+          Text(
+            _isSpeaking ? 'TRANSMITINDO ÁUDIO...' : 'JARVIS SYSTEM',
+            style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 12),
+          ),
+          
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _messages.length,
+              itemBuilder: (context, index) {
+                final msg = _messages[index];
+                final isUser = msg["sender"] == "user";
+                return Align(
+                  alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isUser ? Colors.cyan.withOpacity(0.2) : const Color(0xFF1E2638),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isUser ? Colors.cyanAccent : Colors.white12,
+                      ),
+                    ),
+                    child: Text(
+                      msg["text"] ?? "",
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
-          const Spacer(),
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.all(8.0),
+              child: CircularProgressIndicator(color: Colors.cyanAccent),
+            ),
+            
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(10.0),
+            decoration: const BoxDecoration(
+              color: Color(0xFF0B0E14),
+            ),
             child: Row(
               children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(color: const Color(0xFF1a1a20), borderRadius: BorderRadius.circular(20)),
-                    child: Text('Adic. evento em ${_selectedDay?.day ?? _focusedDay.day}...', style: const TextStyle(color: Colors.white38)),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.cyanAccent.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.cyanAccent.withOpacity(0.4)),
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.mic, color: Colors.cyanAccent),
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Captura de voz acionada.')),
+                      );
+                    },
                   ),
                 ),
-                const SizedBox(width: 12),
-                Container(
-                  decoration: const BoxDecoration(color: Color(0xFF2a2a30), shape: BoxShape.circle),
-                  child: IconButton(icon: const Icon(Icons.add, color: Colors.white), onPressed: () {}),
-                )
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Digite um comando...',
+                      hintStyle: const TextStyle(color: Colors.white38),
+                      filled: true,
+                      fillColor: const Color(0xFF1A2232),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(25),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.send, color: Colors.cyanAccent),
+                  onPressed: _sendMessage,
+                ),
               ],
             ),
-          )
+          ),
         ],
       ),
     );
   }
 }
 
-// --- ABA TODAY (Checklist original da Mark 3 mantido visualmente) ---
-class TelaToday extends StatefulWidget {
-  const TelaToday({super.key});
-  @override
-  State<TelaToday> createState() => _TelaTodayState();
-}
-class _TelaTodayState extends State<TelaToday> {
-  // Código idêntico ao da Mark 3 para checklist, abreviado por espaço, mantendo a estrutura.
+// --- ABA 2: HOJE ---
+class TodayTab extends StatelessWidget {
+  const TodayTab({super.key});
+
   @override
   Widget build(BuildContext context) {
-    return const SafeArea(child: Center(child: Text("ROTINA / CHECKLIST\n(Mantida conforme Mark 3)", textAlign: TextAlign.center, style: TextStyle(color: Colors.white54))));
+    return const Center(
+      child: Text('Aba Hoje (Agenda/Tarefas em breve)', style: TextStyle(color: Colors.white)),
+    );
   }
 }
 
-// --- ORBE HOLOGRÁFICA (Ajustada para vibrar apenas quando fala e aceitar cor) ---
-class OrbeHolograficaPainter extends CustomPainter {
-  final double progress;
-  final bool isSpeaking;
-  final Color orbeColor;
-
-  OrbeHolograficaPainter(this.progress, this.isSpeaking, this.orbeColor);
+// --- ABA 3: MEMÓRIA COM CALENDÁRIO VISUAL ---
+class MemoryTab extends StatefulWidget {
+  const MemoryTab({super.key});
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final paint = Paint()..style = PaintingStyle.fill;
+  State<MemoryTab> createState() => _MemoryTabState();
+}
 
-    int dotCount = 420;
-    double baseRadius = 115.0; // Raio base estático
+class _MemoryTabState extends State<MemoryTab> {
+  DateTime _selectedDate = DateTime.now();
 
-    double angleY = progress * 2 * math.pi;
-    double angleX = progress * math.pi;
-
-    for (int i = 0; i < dotCount; i++) {
-      double phi = math.acos(1 - 2 * (i + 0.5) / dotCount);
-      double theta = math.sqrt(dotCount * math.pi) * phi;
-
-      // A mágica acontece aqui: A amplitude de vibração aleatória só é forte se isSpeaking for TRUE
-      double randomSeed = math.sin(i * 43.13) * 100.0;
-      double frequenciaIndividual = 4.0 + (i % 7) * 1.5;
-      double amplitudeAtual = isSpeaking ? (8.0 + (i % 5) * 4.5) : 1.0; 
-      
-      double onda = math.sin((progress * math.pi * frequenciaIndividual) + randomSeed) * amplitudeAtual;
-      double raioAtual = baseRadius + onda;
-
-      double x = raioAtual * math.sin(phi) * math.cos(theta);
-      double y = raioAtual * math.sin(phi) * math.sin(theta);
-      double z = raioAtual * math.cos(phi);
-
-      double x1 = x * math.cos(angleY) - z * math.sin(angleY);
-      double z1 = x * math.sin(angleY) + z * math.cos(angleY);
-      double y1 = y;
-
-      double y2 = y1 * math.cos(angleX) - z1 * math.sin(angleX);
-      double z2 = y1 * math.sin(angleX) + z1 * math.cos(angleX);
-      double x2 = x1;
-
-      double perspective = 350.0;
-      double scale = perspective / (perspective + z2);
-
-      double screenX = center.dx + x2 * scale;
-      double screenY = center.dy + y2 * scale;
-
-      double alpha = ((z2 + baseRadius) / (baseRadius * 2.2)).clamp(0.08, 0.98);
-      double particleSize = (1.8 * scale).clamp(0.4, 3.8);
-
-      paint.color = orbeColor.withOpacity(alpha * 0.85); // Aplica a cor escolhida nas configurações
-      canvas.drawCircle(Offset(screenX, screenY), particleSize, paint);
-    }
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'REGISTROS E MEMÓRIA',
+              style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.5),
+            ),
+            const SizedBox(height: 15),
+            
+            // Calendário Visual
+            CalendarDatePicker(
+              initialDate: _selectedDate,
+              firstDate: DateTime(2020),
+              lastDate: DateTime(2030),
+              onDateChanged: (date) {
+                setState(() {
+                  _selectedDate = date;
+                });
+              },
+            ),
+            const Divider(color: Colors.cyanAccent),
+            const SizedBox(height: 10),
+            
+            Text(
+              'Memórias gravadas em ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}:',
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            const SizedBox(height: 10),
+            
+            Expanded(
+              child: ListView(
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E2638),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.cyanAccent.withOpacity(0.2)),
+                    ),
+                    child: const Text(
+                      'Nenhum registro encontrado para esta data.',
+                      style: TextStyle(color: Colors.white38),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
-
-  @override
-  bool shouldRepaint(covariant OrbeHolograficaPainter oldDelegate) => true;
 }
