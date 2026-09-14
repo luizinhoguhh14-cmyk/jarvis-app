@@ -14,13 +14,16 @@ subprojects {
 }
 
 subprojects {
-    project.evaluationDependsOn(":app")
-    
-    // Força o compileSdk 36 nos plugins para evitar falhas do file_picker e audioplayers
-    plugins.withId("com.android.library") {
-        val androidExt = extensions.findByName("android") as? com.android.build.gradle.BaseExtension
-        androidExt?.compileSdkVersion(36)
+    afterEvaluate {
+        if (project.hasProperty("android")) {
+            val androidExt = project.extensions.findByName("android") as? com.android.build.gradle.BaseExtension
+            androidExt?.compileSdkVersion(36)
+        }
     }
+}
+
+subprojects {
+    project.evaluationDependsOn(":app")
 }
 
 tasks.register<Delete>("clean") {
