@@ -1,0 +1,31 @@
+[1mdiff --git a/android/build.gradle.kts b/android/build.gradle.kts[m
+[1mindex 7172c11..652e471 100644[m
+[1m--- a/android/build.gradle.kts[m
+[1m+++ b/android/build.gradle.kts[m
+[36m@@ -14,18 +14,17 @@[m [msubprojects {[m
+ }[m
+ [m
+ subprojects {[m
+[32m+[m[32m    subprojects {[m
+[32m+[m[32m    afterEvaluate {[m
+[32m+[m[32m        if (project.hasProperty("android")) {[m
+[32m+[m[32m            val androidExt = project.extensions.findByName("android") as? com.android.build.gradle.BaseExtension[m
+[32m+[m[32m            androidExt?.compileSdkVersion(36)[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m[32m}[m
+     project.evaluationDependsOn(":app")[m
+ }[m
+ [m
+ tasks.register<Delete>("clean") {[m
+     delete(rootProject.layout.buildDirectory)[m
+ }[m
+[31m-[m
+[31m-subprojects {[m
+[31m-    afterEvaluate {[m
+[31m-        if (project.hasProperty("android")) {[m
+[31m-            val android = project.extensions.findByName("android") as? com.android.build.gradle.BaseExtension[m
+[31m-            android?.compileSdkVersion(36)[m
+[31m-        }[m
+[31m-    }[m
+[31m-}[m
