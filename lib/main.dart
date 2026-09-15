@@ -9,73 +9,116 @@ void main() {
   runApp(const JarvisApp());
 }
 
+// --- GERENCIADOR DE ESTADO DE CORES E TEMA ---
+class AppColors extends ChangeNotifier {
+  static final AppColors instance = AppColors();
+
+  Color primaryAccent = const Color(0xFF00E5FF);
+  Color orbeColor = const Color(0xFF00E5FF);
+  bool orbeSegueDestaque = true;
+
+  void updateAccent(Color color) {
+    primaryAccent = color;
+    if (orbeSegueDestaque) {
+      orbeColor = color;
+    }
+    notifyListeners();
+  }
+
+  void updateOrbeColor(Color color, bool segueDestaque) {
+    orbeSegueDestaque = segueDestaque;
+    orbeColor = segueDestaque ? primaryAccent : color;
+    notifyListeners();
+  }
+}
+
 class JarvisApp extends StatelessWidget {
   const JarvisApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'JARVIS AI',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF0B0E14),
-        primaryColor: Colors.cyanAccent,
-      ),
-      home: const HomeScreen(),
+    return AnimatedBuilder(
+      animation: AppColors.instance,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'JARVIS',
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData.dark().copyWith(
+            scaffoldBackgroundColor: const Color(0xFF09090B),
+            primaryColor: AppColors.instance.primaryAccent,
+            colorScheme: ColorScheme.dark(
+              primary: AppColors.instance.primaryAccent,
+              surface: const Color(0xFF121218),
+            ),
+          ),
+          home: const MainNavigation(),
+        );
+      },
     );
   }
 }
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+class MainNavigation extends StatefulWidget {
+  const MainNavigation({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<MainNavigation> createState() => _MainNavigationState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
 
   final List<Widget> _pages = const [
-    JarvisTab(),
+    JarvisVoiceTab(),
     TodayTab(),
     MemoryTab(),
   ];
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      resizeToAvoidBottomInset: true,
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _pages,
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: const Color(0xFF121824),
-        selectedItemColor: Colors.cyanAccent,
-        unselectedItemColor: Colors.white38,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.psychology), label: 'Jarvis'),
-          BottomNavigationBarItem(icon: Icon(Icons.today), label: 'Hoje'),
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Memória'),
-        ],
-      ),
+    return AnimatedBuilder(
+      animation: AppColors.instance,
+      builder: (context, _) {
+        final accent = AppColors.instance.primaryAccent;
+        return Scaffold(
+          body: IndexedStack(
+            index: _currentIndex,
+            children: _pages,
+          ),
+          bottomNavigationBar: BottomNavigationBar(
+            backgroundColor: const Color(0xFF09090B),
+            currentIndex: _currentIndex,
+            selectedItemColor: accent,
+            unselectedItemColor: Colors.white38,
+            selectedFontSize: 11,
+            unselectedFontSize: 11,
+            onTap: (index) => setState(() => _currentIndex = index),
+            items: const [
+              BottomNavigationBarItem(
+                icon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.hexagon_outlined)),
+                label: 'JARVIS',
+              ),
+              BottomNavigationBarItem(
+                icon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.view_list_rounded)),
+                label: 'Today',
+              ),
+              BottomNavigationBarItem(
+                icon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.memory)),
+                label: 'Memory',
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
 
+// --- SERVIÇO FISH AUDIO ---
 class FishAudioService {
-  final String apiKey;
-  final String referenceId;
-  final AudioPlayer _audioPlayer = AudioPlayer();
-
-  FishAudioService({
-    this.apiKey = 'sk-fish-_b2ElwmkHha1WSkJDdXMqN0YBdY9u82r0ANBLWLeewM',
-    this.referenceId = '69a0b1c2f7e2433dabac4413ba0a56d7',
-  });
+  final String apiKey = 'sk-fish-_b2ElwmkHha1WSkJDdXMqN0YBdY9u82r0ANBLWLeewM';
+  final String voiceId = '69a0b1c2f7e2433dabac4413ba0a56d7';
+  final AudioPlayer _player = AudioPlayer();
 
   Future<void> falar(String texto, Function(bool) onSpeakingStateChanged) async {
     try {
@@ -88,15 +131,15 @@ class FishAudioService {
         },
         body: jsonEncode({
           'text': texto,
-          'reference_id': referenceId,
+          'reference_id': voiceId,
           'format': 'mp3',
         }),
       );
 
       if (response.statusCode == 200) {
-        await _audioPlayer.stop();
-        await _audioPlayer.play(BytesSource(response.bodyBytes));
-        _audioPlayer.onPlayerComplete.listen((_) {
+        await _player.stop();
+        await _player.play(BytesSource(response.bodyBytes));
+        _player.onPlayerComplete.listen((_) {
           onSpeakingStateChanged(false);
         });
       } else {
@@ -108,322 +151,364 @@ class FishAudioService {
   }
 }
 
-class OrbeParticulasPainter extends CustomPainter {
+// --- ORBE DE POEIRA ESTELAR COM VIBRAÇÃO ESTOCÁSTICA FLUÍDA ---
+class OrbeOrganicaPainter extends CustomPainter {
   final double progress;
   final bool isSpeaking;
+  final Color baseColor;
 
-  OrbeParticulasPainter({required this.progress, required this.isSpeaking});
+  OrbeOrganicaPainter({
+    required this.progress,
+    required this.isSpeaking,
+    required this.baseColor,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2;
-    final random = Random(42);
+    final baseRadius = size.width / 2.6;
+    final paint = Paint()..style = PaintingStyle.fill;
 
-    final paintPoint = Paint()
-      ..color = Colors.cyanAccent.withOpacity(0.8)
-      ..style = PaintingStyle.fill;
+    const int totalParticulas = 380;
+    final random = Random(1337);
 
-    int totalParticulas = 140;
+    double rotY = progress * 2 * pi;
+    double rotX = progress * pi * 0.5;
 
     for (int i = 0; i < totalParticulas; i++) {
-      double angle = (i / totalParticulas) * 2 * pi;
-      double distanceRatio = random.nextDouble();
+      double phi = acos(1 - 2 * (i + 0.5) / totalParticulas);
+      double theta = sqrt(totalParticulas * pi) * phi;
 
-      double noise = isSpeaking 
-          ? (sin(progress * 2 * pi * 4 + i) * 12.0) 
-          : (sin(progress * 2 * pi + i) * 3.0);
+      double ruídoFrequencia = 3.0 + (i % 5) * 1.2;
+      double ruidoBase = sin(progress * 2 * pi * ruídoFrequencia + random.nextDouble() * 10);
+      
+      double vibracao = isSpeaking
+          ? (ruidoBase * 7.5 + (random.nextDouble() - 0.5) * 6.0)
+          : (ruidoBase * 1.5);
 
-      double r = (radius * distanceRatio) + noise;
-      double x = center.dx + r * cos(angle + (isSpeaking ? progress * pi : 0));
-      double y = center.dy + r * sin(angle + (isSpeaking ? progress * pi : 0));
+      double r = baseRadius + vibracao;
 
-      double pointRadius = isSpeaking ? (1.5 + random.nextDouble() * 2.5) : 1.8;
-      canvas.drawCircle(Offset(x, y), pointRadius, paintPoint);
+      double x = r * sin(phi) * cos(theta);
+      double y = r * sin(phi) * sin(theta);
+      double z = r * cos(phi);
+
+      double x1 = x * cos(rotY) - z * sin(rotY);
+      double z1 = x * sin(rotY) + z * cos(rotY);
+      
+      double y2 = y * cos(rotX) - z1 * sin(rotX);
+      double z2 = y * sin(rotX) + z1 * cos(rotX);
+
+      double perspective = 300.0;
+      double scale = perspective / (perspective + z2);
+
+      double screenX = center.dx + x1 * scale;
+      double screenY = center.dy + y2 * scale;
+
+      double alpha = ((z2 + baseRadius) / (baseRadius * 2.2)).clamp(0.15, 0.95);
+      double particleSize = (1.6 * scale).clamp(0.6, 3.2);
+
+      paint.color = baseColor.withOpacity(alpha);
+      canvas.drawCircle(Offset(screenX, screenY), particleSize, paint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant OrbeParticulasPainter oldDelegate) => true;
+  bool shouldRepaint(covariant OrbeOrganicaPainter oldDelegate) => true;
 }
 
-// --- ABA 1: JARVIS COM CONFIGURAÇÕES NO HUD ---
-class JarvisTab extends StatefulWidget {
-  const JarvisTab({super.key});
+// --- ABA 1: JARVIS VOICE & CHAT ---
+class JarvisVoiceTab extends StatefulWidget {
+  const JarvisVoiceTab({super.key});
 
   @override
-  State<JarvisTab> createState() => _JarvisTabState();
+  State<JarvisVoiceTab> createState() => _JarvisVoiceTabState();
 }
 
-class _JarvisTabState extends State<JarvisTab> with SingleTickerProviderStateMixin {
-  final TextEditingController _controller = TextEditingController();
-  final List<Map<String, String>> _messages = [];
-  final String _apiKey = "SUA_CHAVE_DE_API_DO_GEMINI_AQUI"; 
+class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProviderStateMixin {
+  late AnimationController _animController;
+  final TextEditingController _inputController = TextEditingController();
   final FishAudioService _fishAudio = FishAudioService();
 
-  late AnimationController _animController;
-  bool _isLoading = false;
   bool _isSpeaking = false;
+  bool _showChatOverlay = false;
+  final List<Map<String, String>> _messages = [];
 
   @override
   void initState() {
     super.initState();
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 3),
+      duration: const Duration(seconds: 14),
     )..repeat();
   }
 
   @override
   void dispose() {
     _animController.dispose();
-    _controller.dispose();
+    _inputController.dispose();
     super.dispose();
+  }
+
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 12) return 'Bom dia, Senhor.';
+    if (hour >= 12 && hour < 18) return 'Boa tarde, Senhor.';
+    return 'Boa noite, Senhor.';
   }
 
   void _openSettingsModal() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF121824),
+      backgroundColor: const Color(0xFF121218),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('CONFIGURAÇÕES DO SISTEMA', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 15),
-              ListTile(
-                leading: const Icon(Icons.key, color: Colors.cyanAccent),
-                title: const Text('Chaves de API'),
-                subtitle: const Text('Gemini & Fish Audio'),
-                onTap: () {},
-              ),
-              ListTile(
-                leading: const Icon(Icons.record_voice_over, color: Colors.cyanAccent),
-                title: const Text('Voz do JARVIS'),
-                subtitle: const Text('ID de referência configurado'),
-                onTap: () {},
-              ),
-              ListTile(
-                leading: const Icon(Icons.delete_sweep, color: Colors.redAccent),
-                title: const Text('Limpar Histórico de Chat', style: TextStyle(color: Colors.redAccent)),
-                onTap: () {
-                  setState(() => _messages.clear());
-                  Navigator.pop(context);
-                },
-              ),
-            ],
-          ),
-        );
+        return const SettingsModal();
       },
     );
   }
 
-  Future<void> _sendMessage() async {
-    final text = _controller.text.trim();
+  void _sendMessage() {
+    final text = _inputController.text.trim();
     if (text.isEmpty) return;
 
     setState(() {
       _messages.add({"sender": "user", "text": text});
-      _isLoading = true;
+      _inputController.clear();
+      _showChatOverlay = true;
     });
-    _controller.clear();
 
-    try {
-      final url = Uri.parse(
-          'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$_apiKey');
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "contents": [
-            {
-              "parts": [
-                {"text": text}
-              ]
-            }
-          ]
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final reply = data['candidates'][0]['content']['parts'][0]['text'];
-        setState(() {
-          _messages.add({"sender": "jarvis", "text": reply});
-        });
-        
-        _fishAudio.falar(reply, (speaking) {
-          setState(() {
-            _isSpeaking = speaking;
-          });
-        });
-
-      } else {
-        setState(() {
-          _messages.add({"sender": "jarvis", "text": "Erro no sistema de resposta."});
-        });
-      }
-    } catch (e) {
+    // Simulação da resposta limpa sem prefixos de IA
+    Future.delayed(const Duration(milliseconds: 600), () {
+      final reply = "Entendido, Senhor. Processando os protocolos para: '$text'.";
       setState(() {
-        _messages.add({"sender": "jarvis", "text": "Falha de conexão: $e"});
+        _messages.add({"sender": "jarvis", "text": reply});
       });
-    } finally {
-      setState(() {
-        _isLoading = false;
+      _fishAudio.falar(reply, (speaking) {
+        if (mounted) setState(() => _isSpeaking = speaking);
       });
-    }
-  }
-
-  Widget _buildHudButton(IconData icon, String label, {VoidCallback? onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.cyanAccent.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
-            ),
-            child: Row(
-              children: [
-                Icon(icon, color: Colors.cyanAccent, size: 16),
-                const SizedBox(width: 4),
-                Text(label, style: const TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final accent = AppColors.instance.primaryAccent;
+    final orbeColor = AppColors.instance.orbeColor;
+
     return SafeArea(
       child: Column(
         children: [
+          // TOPO HUD
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildHudButton(Icons.memory, "SYS: 98%"),
-                _buildHudButton(Icons.shield, "DEFENSE"),
-                _buildHudButton(Icons.settings, "CONFIG", onTap: _openSettingsModal),
+                IconButton(
+                  icon: const Icon(Icons.access_time, color: Colors.white70),
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Histórico de interações acessado.')),
+                    );
+                  },
+                ),
+                Text(
+                  'JARVIS',
+                  style: TextStyle(
+                    color: accent,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 2.5,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings_outlined, color: Colors.white70),
+                  onPressed: _openSettingsModal,
+                ),
               ],
             ),
           ),
-          
-          const SizedBox(height: 10),
 
-          AnimatedBuilder(
-            animation: _animController,
-            builder: (context, child) {
-              return CustomPaint(
-                size: const Size(130, 130),
-                painter: OrbeParticulasPainter(
-                  progress: _animController.value,
-                  isSpeaking: _isSpeaking,
-                ),
-              );
-            },
-          ),
-          
-          const SizedBox(height: 8),
-          Text(
-            _isSpeaking ? 'TRANSMITINDO ÁUDIO...' : 'JARVIS SYSTEM',
-            style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 12),
-          ),
-          
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final msg = _messages[index];
-                final isUser = msg["sender"] == "user";
-                return Align(
-                  alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isUser ? Colors.cyan.withOpacity(0.2) : const Color(0xFF1E2638),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isUser ? Colors.cyanAccent : Colors.white12,
-                      ),
-                    ),
-                    child: Text(
-                      msg["text"] ?? "",
-                      style: const TextStyle(color: Colors.white),
-                    ),
+          const Spacer(),
+
+          // ORBE CENTRAL
+          SizedBox(
+            width: 260,
+            height: 260,
+            child: AnimatedBuilder(
+              animation: _animController,
+              builder: (context, child) {
+                return CustomPaint(
+                  painter: OrbeOrganicaPainter(
+                    progress: _animController.value,
+                    isSpeaking: _isSpeaking,
+                    baseColor: orbeColor,
                   ),
                 );
               },
             ),
           ),
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: CircularProgressIndicator(color: Colors.cyanAccent),
+
+          const SizedBox(height: 15),
+
+          if (!_showChatOverlay) ...[
+            Text(
+              _getGreeting(),
+              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
             ),
-            
-          Container(
-            padding: const EdgeInsets.all(10.0),
-            decoration: const BoxDecoration(
-              color: Color(0xFF0B0E14),
+            const SizedBox(height: 6),
+            const Text(
+              'Pergunte as notícias de hoje',
+              style: TextStyle(color: Colors.white54, fontSize: 13),
             ),
-            child: Row(
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.cyanAccent.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.cyanAccent.withOpacity(0.4)),
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Icons.mic, color: Colors.cyanAccent),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Captura de voz acionada.')),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: 'Digite um comando...',
-                      hintStyle: const TextStyle(color: Colors.white38),
-                      filled: true,
-                      fillColor: const Color(0xFF1A2232),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(25),
-                        borderSide: BorderSide.none,
+          ] else
+            Text(
+              _isSpeaking ? '• TRANSMITINDO VOZ •' : '• OUVINDO •',
+              style: TextStyle(
+                color: _isSpeaking ? accent : Colors.white60,
+                fontSize: 12,
+                letterSpacing: 1.5,
+              ),
+            ),
+
+          const Spacer(),
+
+          // ÁREA DE HISTÓRICO EXPANSÍVEL DO CHAT
+          if (_showChatOverlay)
+            Container(
+              height: 160,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: ListView.builder(
+                reverse: true,
+                itemCount: _messages.length,
+                itemBuilder: (context, index) {
+                  final msg = _messages[_messages.length - 1 - index];
+                  final isUser = msg["sender"] == "user";
+                  return Align(
+                    alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isUser ? accent.withOpacity(0.15) : const Color(0xFF1E2638),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: isUser ? accent : Colors.white12),
+                      ),
+                      child: Text(
+                        msg["text"] ?? "",
+                        style: const TextStyle(color: Colors.white, fontSize: 13),
                       ),
                     ),
+                  );
+                },
+              ),
+            ),
+
+          // PAINEL DE CONTROLE E DIGITAÇÃO (MICROFONE + BOTÕES)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: Column(
+              children: [
+                if (!_showChatOverlay)
+                  IconButton(
+                    icon: const Icon(Icons.keyboard_outlined, color: Colors.white60),
+                    onPressed: () => setState(() => _showChatOverlay = true),
                   ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.send, color: Colors.cyanAccent),
-                  onPressed: _sendMessage,
-                ),
+                const SizedBox(height: 8),
+
+                if (_showChatOverlay)
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.add_circle_outline, color: Colors.cyanAccent),
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Anexo (Imagens/PDFs) acionado.')),
+                          );
+                        },
+                      ),
+                      Expanded(
+                        child: TextField(
+                          controller: _inputController,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            hintText: 'Digite para o JARVIS...',
+                            hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+                            filled: true,
+                            fillColor: const Color(0xFF16161E),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                          onSubmitted: (_) => _sendMessage(),
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.send_rounded, color: accent),
+                        onPressed: _sendMessage,
+                      ),
+                    ],
+                  )
+                else
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      // Botão X
+                      Container(
+                        decoration: const BoxDecoration(color: Color(0xFF16161E), shape: BoxShape.circle),
+                        child: IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white70),
+                          onPressed: () => setState(() => _showChatOverlay = false),
+                        ),
+                      ),
+
+                      // Microfone Central
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _isSpeaking = !_isSpeaking;
+                          });
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 250),
+                          width: _isSpeaking ? 64 : 72,
+                          height: _isSpeaking ? 64 : 72,
+                          decoration: BoxDecoration(
+                            color: _isSpeaking ? accent : const Color(0xFF142C33),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: accent.withOpacity(0.3),
+                                blurRadius: 12,
+                                spreadRadius: 2,
+                              )
+                            ],
+                          ),
+                          child: Icon(
+                            _isSpeaking ? Icons.stop_rounded : Icons.mic,
+                            color: _isSpeaking ? Colors.black : accent,
+                            size: 34,
+                          ),
+                        ),
+                      ),
+
+                      // Botão Plus
+                      Container(
+                        decoration: const BoxDecoration(color: Color(0xFF16161E), shape: BoxShape.circle),
+                        child: IconButton(
+                          icon: const Icon(Icons.add, color: Colors.white70),
+                          onPressed: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Seletor de arquivos ativado.')),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),
@@ -433,19 +518,203 @@ class _JarvisTabState extends State<JarvisTab> with SingleTickerProviderStateMix
   }
 }
 
-// --- ABA 2: HOJE ---
-class TodayTab extends StatelessWidget {
-  const TodayTab({super.key});
+// --- MODAL DE CONFIGURAÇÕES DE APARÊNCIA ---
+class SettingsModal extends StatefulWidget {
+  const SettingsModal({super.key});
+
+  @override
+  State<SettingsModal> createState() => _SettingsModalState();
+}
+
+class _SettingsModalState extends State<SettingsModal> {
+  final List<Color> _coresDisponiveis = [
+    const Color(0xFF00E5FF),
+    const Color(0xFF4CAF50),
+    const Color(0xFFFFB300),
+    const Color(0xFF29B6F6),
+    const Color(0xFFAB47BC),
+    const Color(0xFFE0E0E0),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Text('Aba Hoje (Agenda/Tarefas em breve)', style: TextStyle(color: Colors.white)),
+    final appColors = AppColors.instance;
+    return Padding(
+      padding: const EdgeInsets.all(20.0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('APARÊNCIA DO SISTEMA', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+              IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () => Navigator.pop(context)),
+            ],
+          ),
+          const SizedBox(height: 15),
+          const Text('Cor de Destaque:', style: TextStyle(color: Colors.white70, fontSize: 13)),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: _coresDisponiveis.map((cor) {
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    appColors.updateAccent(cor);
+                  });
+                },
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: cor,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: appColors.primaryAccent == cor ? Colors.white : Colors.transparent,
+                      width: 2,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 20),
+          SwitchListTile(
+            activeColor: appColors.primaryAccent,
+            title: const Text('Orbe Segue a Cor de Destaque', style: TextStyle(color: Colors.white, fontSize: 14)),
+            value: appColors.orbeSegueDestaque,
+            onChanged: (val) {
+              setState(() {
+                appColors.updateOrbeColor(appColors.primaryAccent, val);
+              });
+            },
+          ),
+        ],
+      ),
     );
   }
 }
 
-// --- ABA 3: MEMÓRIA COM CALENDÁRIO VISUAL ---
+// --- ABA 2: TODAY (PAINEL DIÁRIO / CHECKLIST) ---
+class TodayTab extends StatefulWidget {
+  const TodayTab({super.key});
+
+  @override
+  State<TodayTab> createState() => _TodayTabState();
+}
+
+class _TodayTabState extends State<TodayTab> {
+  final List<Map<String, dynamic>> _tarefas = [
+    {"titulo": "Revisar protocolos táticos", "horario": "09:00", "concluido": true},
+    {"titulo": "Sincronizar dados de memória", "horario": "14:30", "concluido": false},
+  ];
+  final TextEditingController _taskController = TextEditingController();
+
+  void _addTarefa() {
+    if (_taskController.text.trim().isEmpty) return;
+    setState(() {
+      _tarefas.add({
+        "titulo": _taskController.text.trim(),
+        "horario": "${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}",
+        "concluido": false,
+      });
+      _taskController.clear();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = AppColors.instance.primaryAccent;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'PAINEL HOJE',
+              style: TextStyle(color: accent, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 2),
+            ),
+            const SizedBox(height: 6),
+            const Text('Gerenciamento de rotina e prioridades do dia.', style: TextStyle(color: Colors.white54, fontSize: 12)),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _taskController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Nova tarefa ou protocolo...',
+                      hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+                      filled: true,
+                      fillColor: const Color(0xFF121218),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFF22222E)),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                IconButton(
+                  icon: Icon(Icons.add_box_rounded, color: accent, size: 36),
+                  onPressed: _addTarefa,
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _tarefas.length,
+                itemBuilder: (context, index) {
+                  final item = _tarefas[index];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF121218),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF22222E)),
+                    ),
+                    child: ListTile(
+                      leading: IconButton(
+                        icon: Icon(
+                          item["concluido"] ? Icons.check_circle : Icons.radio_button_unchecked,
+                          color: item["concluido"] ? accent : Colors.white38,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            item["concluido"] = !item["concluido"];
+                          });
+                        },
+                      ),
+                      title: Text(
+                        item["titulo"],
+                        style: TextStyle(
+                          color: item["concluido"] ? Colors.white38 : Colors.white,
+                          decoration: item["concluido"] ? TextDecoration.lineThrough : null,
+                        ),
+                      ),
+                      subtitle: Text(item["horario"], style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.white38, size: 20),
+                        onPressed: () => setState(() => _tarefas.removeAt(index)),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// --- ABA 3: MEMORY (CALENDÁRIO DARK 2026-2030) ---
 class MemoryTab extends StatefulWidget {
   const MemoryTab({super.key});
 
@@ -454,59 +723,141 @@ class MemoryTab extends StatefulWidget {
 }
 
 class _MemoryTabState extends State<MemoryTab> {
-  DateTime _selectedDate = DateTime.now();
+  DateTime _currentMonth = DateTime(2026, 8, 1);
+  DateTime? _selectedDate;
+
+  final Map<String, List<Map<String, dynamic>>> _eventos = {
+    "2026-8-9": [{"titulo": "Dia dos Pais", "cor": Colors.green}],
+    "2026-8-30": [{"titulo": "Estudar Inglês", "cor": Colors.blue}],
+  };
+
+  void _previousMonth() {
+    if (_currentMonth.year > 2026 || _currentMonth.month > 1) {
+      setState(() {
+        _currentMonth = DateTime(_currentMonth.year, _currentMonth.month - 1, 1);
+      });
+    }
+  }
+
+  void _nextMonth() {
+    if (_currentMonth.year < 2030) {
+      setState(() {
+        _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + 1, 1);
+      });
+    }
+  }
+
+  String _getMonthName(int month) {
+    const meses = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+    return meses[month - 1];
+  }
 
   @override
   Widget build(BuildContext context) {
+    final accent = AppColors.instance.primaryAccent;
+    final daysInMonth = DateUtils.getDaysInMonth(_currentMonth.year, _currentMonth.month);
+    final firstWeekday = DateTime(_currentMonth.year, _currentMonth.month, 1).weekday % 7;
+
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'REGISTROS E MEMÓRIA',
-              style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.5),
-            ),
-            const SizedBox(height: 15),
-            
-            // Calendário Visual
-            CalendarDatePicker(
-              initialDate: _selectedDate,
-              firstDate: DateTime(2020),
-              lastDate: DateTime(2030),
-              onDateChanged: (date) {
-                setState(() {
-                  _selectedDate = date;
-                });
-              },
-            ),
-            const Divider(color: Colors.cyanAccent),
-            const SizedBox(height: 10),
-            
-            Text(
-              'Memórias gravadas em ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}:',
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            // CABEÇALHO COM AVANÇO DE ANO/MÊS (2026-2030)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left, color: Colors.white70),
+                  onPressed: _previousMonth,
+                ),
+                Text(
+                  '${_getMonthName(_currentMonth.month)}. ${_currentMonth.year}',
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right, color: Colors.white70),
+                  onPressed: _nextMonth,
+                ),
+              ],
             ),
             const SizedBox(height: 10),
-            
+
+            // DIAS DA SEMANA (DOMINGO EM VERMELHO)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: const [
+                Text('D', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                Text('S', style: TextStyle(color: Colors.white70)),
+                Text('T', style: TextStyle(color: Colors.white70)),
+                Text('Q', style: TextStyle(color: Colors.white70)),
+                Text('Q', style: TextStyle(color: Colors.white70)),
+                Text('S', style: TextStyle(color: Colors.white70)),
+                Text('S', style: TextStyle(color: Colors.white70)),
+              ],
+            ),
+            const Divider(color: Colors.white12, height: 20),
+
+            // GRADE DO CALENDÁRIO
             Expanded(
-              child: ListView(
-                children: [
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E2638),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.cyanAccent.withOpacity(0.2)),
+              child: GridView.builder(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 7,
+                  childAspectRatio: 0.85,
+                ),
+                itemCount: firstWeekday + daysInMonth,
+                itemBuilder: (context, index) {
+                  if (index < firstWeekday) {
+                    return const SizedBox.shrink();
+                  }
+
+                  final dayNumber = index - firstWeekday + 1;
+                  final isSunday = (index % 7) == 0;
+                  final eventKey = "${_currentMonth.year}-${_currentMonth.month}-$dayNumber";
+                  final temEvento = _eventos.containsKey(eventKey);
+
+                  return GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _selectedDate = DateTime(_currentMonth.year, _currentMonth.month, dayNumber);
+                      });
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF101016),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: _selectedDate?.day == dayNumber && _selectedDate?.month == _currentMonth.month
+                              ? accent
+                              : Colors.white.withOpacity(0.05),
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            '$dayNumber',
+                            style: TextStyle(
+                              color: isSunday ? Colors.redAccent : Colors.white,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          if (temEvento)
+                            Container(
+                              margin: const EdgeInsets.only(top: 4),
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: _eventos[eventKey]![0]['cor'],
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                    child: const Text(
-                      'Nenhum registro encontrado para esta data.',
-                      style: TextStyle(color: Colors.white38),
-                    ),
-                  ),
-                ],
+                  );
+                },
               ),
             ),
           ],
