@@ -179,8 +179,8 @@ class OrbeOrganicaPainter extends CustomPainter {
       double phi = acos(1 - 2 * (i + 0.5) / totalParticulas);
       double theta = sqrt(totalParticulas * pi) * phi;
 
-      double ruídoFrequencia = 3.0 + (i % 5) * 1.2;
-      double ruidoBase = sin(progress * 2 * pi * ruídoFrequencia + random.nextDouble() * 10);
+      double ruidoFrequencia = 3.0 + (i % 5) * 1.2;
+      double ruidoBase = sin(progress * 2 * pi * ruidoFrequencia + random.nextDouble() * 10);
       
       double vibracao = isSpeaking
           ? (ruidoBase * 7.5 + (random.nextDouble() - 0.5) * 6.0)
