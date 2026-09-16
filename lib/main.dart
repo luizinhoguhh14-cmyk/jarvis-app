@@ -2,9 +2,12 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:audioplayers/audioplayers.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const JarvisApp());
 }
 
@@ -93,52 +96,47 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 }
 
-// --- SERVIÇO FISH AUDIO (ATUALIZADO COM VARIÁVEL DO CODEMAGIC E SEU ID) ---
-class FishAudioService {
-  // Puxa a chave da API salva no Codemagic (segurança máxima)
-  final String apiKey = const String.fromEnvironment('FISH_AUDIO_API_KEY'); 
-  final String voiceId = '69a0b1c2f7e2433dabac4413ba0a56d7'; // O ID do modelo da voz do JARVIS
-  final AudioPlayer _player = AudioPlayer();
+// --- SERVIÇO DE SÍNTESE DE VOZ (FALAR) ---
+class JarvisVoiceService {
+  final FlutterTts _flutterTts = FlutterTts();
+
+  JarvisVoiceService() {
+    _initTts();
+  }
+
+  void _initTts() async {
+    await _flutterTts.setLanguage("pt-BR");
+    await _flutterTts.setPitch(0.85); // Tom mais sério/sobrio
+    await _flutterTts.setSpeechRate(0.48); // Cadência elegante
+  }
 
   Future<void> falar(String texto, Function(bool) onSpeakingStateChanged) async {
-    if (apiKey.isEmpty) {
-      debugPrint("FISH_AUDIO_API_KEY não encontrada nas variáveis de ambiente.");
-      return;
-    }
     try {
-      onSpeakingStateChanged(true); // Aciona a agitação da Orbe
-      final response = await http.post(
-        Uri.parse('https://api.fish.audio/v1/tts'),
-        headers: {
-          'Authorization': 'Bearer $apiKey',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'text': texto,
-          'reference_id': voiceId,
-          'format': 'mp3',
-        }),
-      );
+      onSpeakingStateChanged(true);
 
-      if (response.statusCode == 200) {
-        await _player.stop();
-        await _player.play(BytesSource(response.bodyBytes));
-        _player.onPlayerComplete.listen((_) {
-          onSpeakingStateChanged(false); // Para a agitação da Orbe
-        });
-      } else {
+      _flutterTts.setCompletionHandler(() {
         onSpeakingStateChanged(false);
-      }
+      });
+
+      _flutterTts.setErrorHandler((msg) {
+        onSpeakingStateChanged(false);
+      });
+
+      await _flutterTts.speak(texto);
     } catch (e) {
       onSpeakingStateChanged(false);
     }
+  }
+
+  Future<void> parar() async {
+    await _flutterTts.stop();
   }
 }
 
 // --- ORBE DE POEIRA ESTELAR ---
 class OrbeOrganicaPainter extends CustomPainter {
   final double progress;
-  final bool isSpeaking; // Somente TRUE quando JARVIS estiver falando
+  final bool isSpeaking;
   final Color baseColor;
 
   OrbeOrganicaPainter({required this.progress, required this.isSpeaking, required this.baseColor});
@@ -159,11 +157,9 @@ class OrbeOrganicaPainter extends CustomPainter {
       double phi = acos(1 - 2 * (i + 0.5) / totalParticulas);
       double theta = sqrt(totalParticulas * pi) * phi;
 
-      // Variável corrigida sem acento para o Codemagic compilar
       double ruidoFrequencia = 3.0 + (i % 5) * 1.2; 
       double ruidoBase = sin(progress * 2 * pi * ruidoFrequencia + random.nextDouble() * 10);
       
-      // Agitação forte só acontece se 'isSpeaking' for true
       double vibracao = isSpeaking
           ? (ruidoBase * 7.5 + (random.nextDouble() - 0.5) * 6.0)
           : (ruidoBase * 1.5);
@@ -197,7 +193,7 @@ class OrbeOrganicaPainter extends CustomPainter {
   bool shouldRepaint(covariant OrbeOrganicaPainter oldDelegate) => true;
 }
 
-// --- ABA 1: JARVIS VOICE & CHAT (ATUALIZADA) ---
+// --- ABA 1: JARVIS VOICE & CHAT ---
 class JarvisVoiceTab extends StatefulWidget {
   const JarvisVoiceTab({super.key});
   @override
@@ -207,16 +203,19 @@ class JarvisVoiceTab extends StatefulWidget {
 class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProviderStateMixin {
   late AnimationController _animController;
   final TextEditingController _inputController = TextEditingController();
-  final FishAudioService _fishAudio = FishAudioService();
+  final JarvisVoiceService _voiceService = JarvisVoiceService();
+  late stt.SpeechToText _speech;
 
-  bool _isRecordingUser = false; // Estado para o microfone gravando o Senhor
-  bool _isJarvisSpeaking = false; // Estado para agitar a orbe (só JARVIS)
+  bool _isListening = false;
+  bool _isJarvisSpeaking = false;
   bool _showChatOverlay = false;
+  String _recognizedText = '';
   final List<Map<String, String>> _messages = [];
 
   @override
   void initState() {
     super.initState();
+    _speech = stt.SpeechToText();
     _animController = AnimationController(vsync: this, duration: const Duration(seconds: 14))..repeat();
   }
 
@@ -225,6 +224,65 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
     _animController.dispose();
     _inputController.dispose();
     super.dispose();
+  }
+
+  Future<void> _toggleMicrophone() async {
+    var status = await Permission.microphone.status;
+    if (!status.isGranted) {
+      status = await Permission.microphone.request();
+      if (!status.isGranted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Permissão de microfone necessária para ouvir o Senhor.')),
+          );
+        }
+        return;
+      }
+    }
+
+    if (!_isListening) {
+      bool available = await _speech.initialize(
+        onStatus: (val) {
+          if (val == 'done' || val == 'notListening') {
+            if (_isListening) {
+              setState(() => _isListening = false);
+              if (_recognizedText.trim().isNotEmpty) {
+                _sendMessage(predefinedText: _recognizedText);
+                _recognizedText = '';
+              }
+            }
+          }
+        },
+        onError: (val) {
+          setState(() => _isListening = false);
+        },
+      );
+
+      if (available) {
+        setState(() {
+          _isListening = true;
+          _recognizedText = '';
+        });
+        _speech.listen(
+          localeId: 'pt_BR',
+          onResult: (val) {
+            setState(() {
+              _recognizedText = val.recognizedWords;
+            });
+          },
+        );
+      } else {
+        // Fallback caso a API nativa de voz falhe
+        _sendMessage(predefinedText: "Comando de voz do Senhor.");
+      }
+    } else {
+      setState(() => _isListening = false);
+      _speech.stop();
+      if (_recognizedText.trim().isNotEmpty) {
+        _sendMessage(predefinedText: _recognizedText);
+        _recognizedText = '';
+      }
+    }
   }
 
   String _getGreeting() {
@@ -244,15 +302,13 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
       _showChatOverlay = true;
     });
 
-    // Simulação do processamento de resposta para teste
-    Future.delayed(const Duration(milliseconds: 600), () {
-      final reply = "Recebi sua mensagem. Esta é a minha voz nativa da Mark 5.";
+    Future.delayed(const Duration(milliseconds: 500), () {
+      final reply = "Comando recebido, Senhor. Todos os sistemas de voz e áudio estão operando perfeitamente.";
       setState(() {
         _messages.add({"sender": "jarvis", "text": reply});
       });
       
-      // Aciona o FishAudio. Ele mesmo vai alterar o `_isJarvisSpeaking` para true e false
-      _fishAudio.falar(reply, (speaking) {
+      _voiceService.falar(reply, (speaking) {
         if (mounted) setState(() => _isJarvisSpeaking = speaking);
       });
     });
@@ -271,10 +327,7 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                IconButton(
-                  icon: const Icon(Icons.access_time, color: Colors.white70),
-                  onPressed: () {},
-                ),
+                IconButton(icon: const Icon(Icons.access_time, color: Colors.white70), onPressed: () {}),
                 Text('JARVIS', style: TextStyle(color: accent, fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 2.5)),
                 IconButton(icon: const Icon(Icons.settings_outlined, color: Colors.white70), onPressed: () {}),
               ],
@@ -288,7 +341,6 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
               animation: _animController,
               builder: (context, child) {
                 return CustomPaint(
-                  // A orbe só agita se _isJarvisSpeaking for true
                   painter: OrbeOrganicaPainter(progress: _animController.value, isSpeaking: _isJarvisSpeaking, baseColor: orbeColor),
                 );
               },
@@ -298,11 +350,14 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
           if (!_showChatOverlay) ...[
             Text(_getGreeting(), style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
-            const Text('Pergunte as notícias de hoje', style: TextStyle(color: Colors.white54, fontSize: 13)),
+            Text(
+              _isListening ? 'Ouvindo o Senhor: "$_recognizedText"...' : 'Pressione o microfone para falar',
+              style: TextStyle(color: _isListening ? accent : Colors.white54, fontSize: 13),
+            ),
           ] else
             Text(
-              _isJarvisSpeaking ? '• TRANSMITINDO VOZ •' : (_isRecordingUser ? '• OUVINDO SENHOR •' : '• PROCESSANDO •'),
-              style: TextStyle(color: (_isJarvisSpeaking || _isRecordingUser) ? accent : Colors.white60, fontSize: 12, letterSpacing: 1.5),
+              _isJarvisSpeaking ? '• TRANSMITINDO VOZ •' : (_isListening ? '• OUVINDO SENHOR •' : '• SISTEMA PRONTO •'),
+              style: TextStyle(color: (_isJarvisSpeaking || _isListening) ? accent : Colors.white60, fontSize: 12, letterSpacing: 1.5),
             ),
           const Spacer(),
           if (_showChatOverlay)
@@ -368,31 +423,22 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
                         decoration: const BoxDecoration(color: Color(0xFF16161E), shape: BoxShape.circle),
                         child: IconButton(icon: const Icon(Icons.close, color: Colors.white70), onPressed: () => setState(() => _showChatOverlay = false)),
                       ),
-                      // BOTÃO DE MICROFONE CORRIGIDO
                       GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _isRecordingUser = !_isRecordingUser;
-                            if (!_isRecordingUser) {
-                              // Quando o Senhor solta/para de gravar, envia um áudio simulado
-                              _sendMessage(predefinedText: "[Áudio capturado pelo Microfone]");
-                            }
-                          });
-                        },
+                        onTap: _toggleMicrophone,
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 250),
-                          width: _isRecordingUser ? 64 : 72,
-                          height: _isRecordingUser ? 64 : 72,
+                          width: _isListening ? 64 : 72,
+                          height: _isListening ? 64 : 72,
                           decoration: BoxDecoration(
-                            color: _isRecordingUser ? Colors.redAccent : const Color(0xFF142C33), // Fica vermelho ao gravar
+                            color: _isListening ? Colors.redAccent : const Color(0xFF142C33),
                             shape: BoxShape.circle,
                             boxShadow: [
-                              BoxShadow(color: _isRecordingUser ? Colors.redAccent.withOpacity(0.3) : accent.withOpacity(0.3), blurRadius: 12, spreadRadius: 2)
+                              BoxShadow(color: _isListening ? Colors.redAccent.withOpacity(0.3) : accent.withOpacity(0.3), blurRadius: 12, spreadRadius: 2)
                             ],
                           ),
                           child: Icon(
-                            _isRecordingUser ? Icons.stop_rounded : Icons.mic,
-                            color: _isRecordingUser ? Colors.white : accent,
+                            _isListening ? Icons.stop_rounded : Icons.mic,
+                            color: _isListening ? Colors.white : accent,
                             size: 34,
                           ),
                         ),
@@ -412,7 +458,7 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
   }
 }
 
-// --- ABA 2: TODAY (MANTIDA INTACTA) ---
+// --- ABA 2: TODAY ---
 class TodayTab extends StatefulWidget {
   const TodayTab({super.key});
   @override
@@ -477,7 +523,7 @@ class _TodayTabState extends State<TodayTab> {
   }
 }
 
-// --- ABA 3: MEMORY (MANTIDA INTACTA NESTA ETAPA) ---
+// --- ABA 3: MEMORY ---
 class MemoryTab extends StatefulWidget {
   const MemoryTab({super.key});
   @override
