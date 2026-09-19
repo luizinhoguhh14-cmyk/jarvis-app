@@ -96,7 +96,7 @@ class JarvisVoiceService {
   
   final String fishAudioApiKey = const String.fromEnvironment(
     'FISH_AUDIO_API_KEY',
-    defaultValue: 'sk-fish-_b2ElwmkHha1WSkJDdXMqN0YBdY9u82r0ANBLWLeewM',
+    defaultValue: 'sk-fish-_b2ElwmkHha1WSJDdXMqN0YBdY9u82r0ANBLWLeewM',
   );
   final String referenceId = const String.fromEnvironment(
     'FISH_VOICE_ID',
@@ -394,7 +394,7 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
           ),
           const SizedBox(height: 15),
           if (!_showChatOverlay) ...[
-            const Text('Olá, Senhor.', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+            Text('DIAGNÓSTICO -> Gemini: ${geminiApiKey.isEmpty ? "VAZIO" : "OK"} | Groq: ${groqApiKey.isEmpty ? "VAZIO" : "OK"} | Fish: ${_voiceService.fishAudioApiKey.isEmpty ? "VAZIO" : "OK"}', style: const TextStyle(color: Colors.yellow, fontSize: 13, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
             Text(
               _isListening ? 'Ouvindo: "$_recognizedText"...' : 'Pressione o microfone para falar',
