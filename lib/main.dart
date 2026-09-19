@@ -394,7 +394,7 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
           ),
           const SizedBox(height: 15),
           if (!_showChatOverlay) ...[
-            Text('DIAGNÓSTICO -> Gemini: ${geminiApiKey.isEmpty ? "VAZIO" : "OK"} | Groq: ${groqApiKey.isEmpty ? "VAZIO" : "OK"} | Fish: ${_voiceService.fishAudioApiKey.isEmpty ? "VAZIO" : "OK"}', style: const TextStyle(color: Colors.yellow, fontSize: 13, fontWeight: FontWeight.bold)),
+            Text('CHAVES -> Gem: ${geminiApiKey.length > 4 ? geminiApiKey.substring(0,5) : "Erro"} | Groq: ${groqApiKey.length > 4 ? groqApiKey.substring(0,5) : "Erro"} | Fish: ${_voiceService.fishAudioApiKey.length > 4 ? _voiceService.fishAudioApiKey.substring(0,5) : "Erro"}', style: const TextStyle(color: Colors.yellow, fontSize: 13, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
             Text(
               _isListening ? 'Ouvindo: "$_recognizedText"...' : 'Pressione o microfone para falar',
