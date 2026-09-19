@@ -13,7 +13,6 @@ void main() {
   runApp(const JarvisApp());
 }
 
-// --- GERENCIADOR DE ESTADO DE CORES E TEMA ---
 class AppColors extends ChangeNotifier {
   static final AppColors instance = AppColors();
   Color primaryAccent = const Color(0xFF00E5FF);
@@ -22,15 +21,7 @@ class AppColors extends ChangeNotifier {
 
   void updateAccent(Color color) {
     primaryAccent = color;
-    if (orbeSegueDestaque) {
-      orbeColor = color;
-    }
-    notifyListeners();
-  }
-
-  void updateOrbeColor(Color color, bool segueDestaque) {
-    orbeSegueDestaque = segueDestaque;
-    orbeColor = segueDestaque ? primaryAccent : color;
+    if (orbeSegueDestaque) orbeColor = color;
     notifyListeners();
   }
 }
@@ -98,14 +89,19 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 }
 
-// --- SERVIÇO DE VOZ (FISH AUDIO + FALLBACK FLUTTER_TTS) ---
+// --- SERVIÇO DE VOZ (FISH AUDIO) ---
 class JarvisVoiceService {
   final AudioPlayer _audioPlayer = AudioPlayer();
   final FlutterTts _flutterTts = FlutterTts();
   
-  // Insira a sua chave API do Fish Audio aqui quando disponível
-  String fishAudioApiKey = ""; 
-  String referenceId = ""; 
+  final String fishAudioApiKey = const String.fromEnvironment(
+    'FISH_API_KEY',
+    defaultValue: 'sk-fish-_b2ElwmkHha1WSkJDdXMqN0YBdY9u82r0ANBLWLeewM',
+  );
+  final String referenceId = const String.fromEnvironment(
+    'FISH_VOICE_ID',
+    defaultValue: '69a0b1c2f7e2433dabac4413ba0a56d7',
+  );
 
   JarvisVoiceService() {
     _initTts();
@@ -143,19 +139,12 @@ class JarvisVoiceService {
           });
           return;
         }
-      } catch (_) {
-        // Se houver erro na API Fish Audio, ativa o fallback nativo abaixo
-      }
+      } catch (_) {}
     }
 
-    // Fallback nativo
     try {
-      _flutterTts.setCompletionHandler(() {
-        onSpeakingStateChanged(false);
-      });
-      _flutterTts.setErrorHandler((_) {
-        onSpeakingStateChanged(false);
-      });
+      _flutterTts.setCompletionHandler(() => onSpeakingStateChanged(false));
+      _flutterTts.setErrorHandler((_) => onSpeakingStateChanged(false));
       await _flutterTts.speak(texto);
     } catch (_) {
       onSpeakingStateChanged(false);
@@ -181,7 +170,6 @@ class OrbeOrganicaPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final baseRadius = size.width / 2.6;
     final paint = Paint()..style = PaintingStyle.fill;
-
     const int totalParticulas = 380;
     final random = Random(1337);
 
@@ -191,14 +179,9 @@ class OrbeOrganicaPainter extends CustomPainter {
     for (int i = 0; i < totalParticulas; i++) {
       double phi = acos(1 - 2 * (i + 0.5) / totalParticulas);
       double theta = sqrt(totalParticulas * pi) * phi;
-
       double ruidoFrequencia = 3.0 + (i % 5) * 1.2; 
       double ruidoBase = sin(progress * 2 * pi * ruidoFrequencia + random.nextDouble() * 10);
-      
-      double vibracao = isSpeaking
-          ? (ruidoBase * 7.5 + (random.nextDouble() - 0.5) * 6.0)
-          : (ruidoBase * 1.5);
-
+      double vibracao = isSpeaking ? (ruidoBase * 7.5 + (random.nextDouble() - 0.5) * 6.0) : (ruidoBase * 1.5);
       double r = baseRadius + vibracao;
 
       double x = r * sin(phi) * cos(theta);
@@ -207,7 +190,6 @@ class OrbeOrganicaPainter extends CustomPainter {
 
       double x1 = x * cos(rotY) - z * sin(rotY);
       double z1 = x * sin(rotY) + z * cos(rotY);
-      
       double y2 = y * cos(rotX) - z1 * sin(rotX);
       double z2 = y * sin(rotX) + z1 * cos(rotX);
 
@@ -216,7 +198,6 @@ class OrbeOrganicaPainter extends CustomPainter {
 
       double screenX = center.dx + x1 * scale;
       double screenY = center.dy + y2 * scale;
-
       double alpha = ((z2 + baseRadius) / (baseRadius * 2.2)).clamp(0.15, 0.95);
       double particleSize = (1.6 * scale).clamp(0.6, 3.2);
 
@@ -228,7 +209,7 @@ class OrbeOrganicaPainter extends CustomPainter {
   bool shouldRepaint(covariant OrbeOrganicaPainter oldDelegate) => true;
 }
 
-// --- ABA 1: JARVIS VOICE & CHAT ---
+// --- ABA 1: JARVIS VOICE & IA CHAT ---
 class JarvisVoiceTab extends StatefulWidget {
   const JarvisVoiceTab({super.key});
   @override
@@ -247,6 +228,11 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
   String _recognizedText = '';
   final List<Map<String, String>> _messages = [];
 
+  final String geminiApiKey = const String.fromEnvironment(
+    'GEMINI_API_KEY',
+    defaultValue: '',
+  );
+
   @override
   void initState() {
     super.initState();
@@ -261,18 +247,33 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
     super.dispose();
   }
 
+  Future<String> _obterRespostaIA(String pergunta) async {
+    if (geminiApiKey.isEmpty) {
+      return "Comando recebido, Senhor. Todos os sistemas de voz e áudio estão ativos.";
+    }
+    try {
+      final response = await http.post(
+        Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$geminiApiKey'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "contents": [{
+            "parts": [{"text": "Você é o JARVIS, assistente do Homem de Ferro. Responda de forma direta e curta: $pergunta"}]
+          }]
+        }),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['candidates'][0]['content']['parts'][0]['text'];
+      }
+    } catch (_) {}
+    return "Desculpe, Senhor. Falha na conexão com meus servidores de IA.";
+  }
+
   Future<void> _toggleMicrophone() async {
     var status = await Permission.microphone.status;
     if (!status.isGranted) {
       status = await Permission.microphone.request();
-      if (!status.isGranted) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Permissão de microfone necessária para ouvir o Senhor.')),
-          );
-        }
-        return;
-      }
+      if (!status.isGranted) return;
     }
 
     if (!_isListening) {
@@ -288,26 +289,15 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
             }
           }
         },
-        onError: (val) {
-          setState(() => _isListening = false);
-        },
+        onError: (_) => setState(() => _isListening = false),
       );
 
       if (available) {
-        setState(() {
-          _isListening = true;
-          _recognizedText = '';
-        });
+        setState(() { _isListening = true; _recognizedText = ''; });
         _speech.listen(
           localeId: 'pt_BR',
-          onResult: (val) {
-            setState(() {
-              _recognizedText = val.recognizedWords;
-            });
-          },
+          onResult: (val) => setState(() => _recognizedText = val.recognizedWords),
         );
-      } else {
-        _sendMessage(predefinedText: "Comando de voz do Senhor.");
       }
     } else {
       setState(() => _isListening = false);
@@ -319,14 +309,7 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
     }
   }
 
-  String _getGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour >= 5 && hour < 12) return 'Bom dia, Senhor.';
-    if (hour >= 12 && hour < 18) return 'Boa tarde, Senhor.';
-    return 'Boa noite, Senhor.';
-  }
-
-  void _sendMessage({String? predefinedText}) {
+  void _sendMessage({String? predefinedText}) async {
     final text = predefinedText ?? _inputController.text.trim();
     if (text.isEmpty) return;
 
@@ -336,16 +319,16 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
       _showChatOverlay = true;
     });
 
-    Future.delayed(const Duration(milliseconds: 500), () {
-      final reply = "Comando recebido, Senhor. Todos os sistemas de voz, áudio e captura do microfone estão operando perfeitamente.";
+    final reply = await _obterRespostaIA(text);
+
+    if (mounted) {
       setState(() {
         _messages.add({"sender": "jarvis", "text": reply});
       });
-      
       _voiceService.falar(reply, (speaking) {
         if (mounted) setState(() => _isJarvisSpeaking = speaking);
       });
-    });
+    }
   }
 
   @override
@@ -382,10 +365,10 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
           ),
           const SizedBox(height: 15),
           if (!_showChatOverlay) ...[
-            Text(_getGreeting(), style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+            const Text('Olá, Senhor.', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
             Text(
-              _isListening ? 'Ouvindo o Senhor: "$_recognizedText"...' : 'Pressione o microfone para falar',
+              _isListening ? 'Ouvindo: "$_recognizedText"...' : 'Pressione o microfone para falar',
               style: TextStyle(color: _isListening ? accent : Colors.white54, fontSize: 13),
             ),
           ] else
@@ -492,141 +475,18 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
   }
 }
 
-// --- ABA 2: TODAY ---
-class TodayTab extends StatefulWidget {
+class TodayTab extends StatelessWidget {
   const TodayTab({super.key});
   @override
-  State<TodayTab> createState() => _TodayTabState();
-}
-class _TodayTabState extends State<TodayTab> {
-  final List<Map<String, dynamic>> _tarefas = [
-    {"titulo": "Revisar protocolos táticos", "horario": "09:00", "concluido": true},
-    {"titulo": "Sincronizar dados de memória", "horario": "14:30", "concluido": false},
-  ];
-  final TextEditingController _taskController = TextEditingController();
-  void _addTarefa() {
-    if (_taskController.text.trim().isEmpty) return;
-    setState(() {
-      _tarefas.add({"titulo": _taskController.text.trim(), "horario": "${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}", "concluido": false});
-      _taskController.clear();
-    });
-  }
-  @override
   Widget build(BuildContext context) {
-    final accent = AppColors.instance.primaryAccent;
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('PAINEL HOJE', style: TextStyle(color: accent, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 2)),
-            const SizedBox(height: 6),
-            const Text('Gerenciamento de rotina e prioridades do dia.', style: TextStyle(color: Colors.white54, fontSize: 12)),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(child: TextField(controller: _taskController, style: const TextStyle(color: Colors.white), decoration: InputDecoration(hintText: 'Nova tarefa ou protocolo...', hintStyle: const TextStyle(color: Colors.white38, fontSize: 13), filled: true, fillColor: const Color(0xFF121218), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF22222E)))))),
-                const SizedBox(width: 10),
-                IconButton(icon: Icon(Icons.add_box_rounded, color: accent, size: 36), onPressed: _addTarefa),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: ListView.builder(
-                itemCount: _tarefas.length,
-                itemBuilder: (context, index) {
-                  final item = _tarefas[index];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    decoration: BoxDecoration(color: const Color(0xFF121218), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFF22222E))),
-                    child: ListTile(
-                      leading: IconButton(icon: Icon(item["concluido"] ? Icons.check_circle : Icons.radio_button_unchecked, color: item["concluido"] ? accent : Colors.white38), onPressed: () => setState(() => item["concluido"] = !item["concluido"])),
-                      title: Text(item["titulo"], style: TextStyle(color: item["concluido"] ? Colors.white38 : Colors.white, decoration: item["concluido"] ? TextDecoration.lineThrough : null)),
-                      subtitle: Text(item["horario"], style: const TextStyle(color: Colors.white38, fontSize: 11)),
-                      trailing: IconButton(icon: const Icon(Icons.delete_outline, color: Colors.white38, size: 20), onPressed: () => setState(() => _tarefas.removeAt(index))),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    return const Center(child: Text('Painel Hoje', style: TextStyle(color: Colors.white)));
   }
 }
 
-// --- ABA 3: MEMORY ---
-class MemoryTab extends StatefulWidget {
+class MemoryTab extends StatelessWidget {
   const MemoryTab({super.key});
   @override
-  State<MemoryTab> createState() => _MemoryTabState();
-}
-class _MemoryTabState extends State<MemoryTab> {
-  DateTime _currentMonth = DateTime(2026, 8, 1);
-  DateTime? _selectedDate;
-  final Map<String, List<Map<String, dynamic>>> _eventos = {
-    "2026-8-9": [{"titulo": "Dia dos Pais", "cor": Colors.green}],
-    "2026-8-30": [{"titulo": "Estudar Inglês", "cor": Colors.blue}],
-  };
-  void _previousMonth() { if (_currentMonth.year > 2026 || _currentMonth.month > 1) setState(() => _currentMonth = DateTime(_currentMonth.year, _currentMonth.month - 1, 1)); }
-  void _nextMonth() { if (_currentMonth.year < 2030) setState(() => _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + 1, 1)); }
-  String _getMonthName(int month) { const meses = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ']; return meses[month - 1]; }
-  @override
   Widget build(BuildContext context) {
-    final accent = AppColors.instance.primaryAccent;
-    final daysInMonth = DateUtils.getDaysInMonth(_currentMonth.year, _currentMonth.month);
-    final firstWeekday = DateTime(_currentMonth.year, _currentMonth.month, 1).weekday % 7;
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(icon: const Icon(Icons.chevron_left, color: Colors.white70), onPressed: _previousMonth),
-                Text('${_getMonthName(_currentMonth.month)}. ${_currentMonth.year}', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
-                IconButton(icon: const Icon(Icons.chevron_right, color: Colors.white70), onPressed: _nextMonth),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: const [Text('D', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)), Text('S', style: TextStyle(color: Colors.white70)), Text('T', style: TextStyle(color: Colors.white70)), Text('Q', style: TextStyle(color: Colors.white70)), Text('Q', style: TextStyle(color: Colors.white70)), Text('S', style: TextStyle(color: Colors.white70)), Text('S', style: TextStyle(color: Colors.white70))],
-            ),
-            const Divider(color: Colors.white12, height: 20),
-            Expanded(
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, childAspectRatio: 0.85),
-                itemCount: firstWeekday + daysInMonth,
-                itemBuilder: (context, index) {
-                  if (index < firstWeekday) return const SizedBox.shrink();
-                  final dayNumber = index - firstWeekday + 1;
-                  final isSunday = (index % 7) == 0;
-                  final eventKey = "${_currentMonth.year}-${_currentMonth.month}-$dayNumber";
-                  final temEvento = _eventos.containsKey(eventKey);
-                  return GestureDetector(
-                    onTap: () => setState(() => _selectedDate = DateTime(_currentMonth.year, _currentMonth.month, dayNumber)),
-                    child: Container(
-                      margin: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(color: const Color(0xFF101016), borderRadius: BorderRadius.circular(6), border: Border.all(color: _selectedDate?.day == dayNumber && _selectedDate?.month == _currentMonth.month ? accent : Colors.white.withOpacity(0.05))),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text('$dayNumber', style: TextStyle(color: isSunday ? Colors.redAccent : Colors.white, fontWeight: FontWeight.w500)),
-                          if (temEvento) Container(margin: const EdgeInsets.only(top: 4), width: 6, height: 6, decoration: BoxDecoration(color: _eventos[eventKey]![0]['cor'], shape: BoxShape.circle)),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    return const Center(child: Text('Memória', style: TextStyle(color: Colors.white)));
   }
 }
