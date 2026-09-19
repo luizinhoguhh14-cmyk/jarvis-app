@@ -232,6 +232,10 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
     'GEMINI_API_KEY',
     defaultValue: '',
   );
+  final String groqApiKey = const String.fromEnvironment(
+    'GROQ_API_KEY',
+    defaultValue: '',
+  );
 
   @override
   void initState() {
@@ -248,25 +252,50 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
   }
 
   Future<String> _obterRespostaIA(String pergunta) async {
-    if (geminiApiKey.isEmpty) {
-      return "Comando recebido, Senhor. Todos os sistemas de voz e áudio estão ativos.";
+    // 1ª Tentativa: Gemini API
+    if (geminiApiKey.isNotEmpty) {
+      try {
+        final response = await http.post(
+          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$geminiApiKey'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            "contents": [{
+              "parts": [{"text": "Você é o JARVIS, assistente do Homem de Ferro. Responda de forma direta e curta: $pergunta"}]
+            }]
+          }),
+        );
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          return data['candidates'][0]['content']['parts'][0]['text'];
+        }
+      } catch (_) {}
     }
-    try {
-      final response = await http.post(
-        Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$geminiApiKey'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "contents": [{
-            "parts": [{"text": "Você é o JARVIS, assistente do Homem de Ferro. Responda de forma direta e curta: $pergunta"}]
-          }]
-        }),
-      );
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['candidates'][0]['content']['parts'][0]['text'];
-      }
-    } catch (_) {}
-    return "Desculpe, Senhor. Falha na conexão com meus servidores de IA.";
+
+    // 2ª Tentativa (Fallback): Groq API (Llama 3)
+    if (groqApiKey.isNotEmpty) {
+      try {
+        final response = await http.post(
+          Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
+          headers: {
+            'Authorization': 'Bearer $groqApiKey',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            "model": "llama-3.3-70b-versatile",
+            "messages": [
+              {"role": "system", "content": "Você é o JARVIS, assistente do Homem de Ferro. Responda de forma direta e curta em português."},
+              {"role": "user", "content": pergunta}
+            ]
+          }),
+        );
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          return data['choices'][0]['message']['content'];
+        }
+      } catch (_) {}
+    }
+
+    return "Comando recebido, Senhor. Todos os sistemas de voz e áudio estão ativos.";
   }
 
   Future<void> _toggleMicrophone() async {
