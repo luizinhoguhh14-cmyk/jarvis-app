@@ -95,7 +95,7 @@ class JarvisVoiceService {
   final FlutterTts _flutterTts = FlutterTts();
   
   final String fishAudioApiKey = const String.fromEnvironment(
-    'FISH_API_KEY',
+    'FISH_AUDIO_API_KEY',
     defaultValue: 'sk-fish-_b2ElwmkHha1WSkJDdXMqN0YBdY9u82r0ANBLWLeewM',
   );
   final String referenceId = const String.fromEnvironment(
