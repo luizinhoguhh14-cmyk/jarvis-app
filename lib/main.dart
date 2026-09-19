@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:audioplayers/audioplayers.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -96,9 +98,14 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 }
 
-// --- SERVIÇO DE SÍNTESE DE VOZ (FALAR) ---
+// --- SERVIÇO DE VOZ (FISH AUDIO + FALLBACK FLUTTER_TTS) ---
 class JarvisVoiceService {
+  final AudioPlayer _audioPlayer = AudioPlayer();
   final FlutterTts _flutterTts = FlutterTts();
+  
+  // Insira a sua chave API do Fish Audio aqui quando disponível
+  String fishAudioApiKey = ""; 
+  String referenceId = ""; 
 
   JarvisVoiceService() {
     _initTts();
@@ -106,29 +113,57 @@ class JarvisVoiceService {
 
   void _initTts() async {
     await _flutterTts.setLanguage("pt-BR");
-    await _flutterTts.setPitch(0.85); // Tom mais sério/sobrio
-    await _flutterTts.setSpeechRate(0.48); // Cadência elegante
+    await _flutterTts.setPitch(0.85);
+    await _flutterTts.setSpeechRate(0.48);
   }
 
   Future<void> falar(String texto, Function(bool) onSpeakingStateChanged) async {
-    try {
-      onSpeakingStateChanged(true);
+    onSpeakingStateChanged(true);
 
+    if (fishAudioApiKey.isNotEmpty) {
+      try {
+        final response = await http.post(
+          Uri.parse('https://api.fish.audio/v1/tts'),
+          headers: {
+            'Authorization': 'Bearer $fishAudioApiKey',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'text': texto,
+            'reference_id': referenceId,
+            'format': 'mp3',
+          }),
+        );
+
+        if (response.statusCode == 200) {
+          Uint8List audioBytes = response.bodyBytes;
+          await _audioPlayer.play(BytesSource(audioBytes));
+          _audioPlayer.onPlayerComplete.listen((_) {
+            onSpeakingStateChanged(false);
+          });
+          return;
+        }
+      } catch (_) {
+        // Se houver erro na API Fish Audio, ativa o fallback nativo abaixo
+      }
+    }
+
+    // Fallback nativo
+    try {
       _flutterTts.setCompletionHandler(() {
         onSpeakingStateChanged(false);
       });
-
-      _flutterTts.setErrorHandler((msg) {
+      _flutterTts.setErrorHandler((_) {
         onSpeakingStateChanged(false);
       });
-
       await _flutterTts.speak(texto);
-    } catch (e) {
+    } catch (_) {
       onSpeakingStateChanged(false);
     }
   }
 
   Future<void> parar() async {
+    await _audioPlayer.stop();
     await _flutterTts.stop();
   }
 }
@@ -272,7 +307,6 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
           },
         );
       } else {
-        // Fallback caso a API nativa de voz falhe
         _sendMessage(predefinedText: "Comando de voz do Senhor.");
       }
     } else {
@@ -303,7 +337,7 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
     });
 
     Future.delayed(const Duration(milliseconds: 500), () {
-      final reply = "Comando recebido, Senhor. Todos os sistemas de voz e áudio estão operando perfeitamente.";
+      final reply = "Comando recebido, Senhor. Todos os sistemas de voz, áudio e captura do microfone estão operando perfeitamente.";
       setState(() {
         _messages.add({"sender": "jarvis", "text": reply});
       });
