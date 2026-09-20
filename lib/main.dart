@@ -252,26 +252,27 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
   }
 
   Future<String> _obterRespostaIA(String pergunta) async {
-    // 1ª Tentativa: Gemini API
+    String logErro = "";
+    
     if (geminiApiKey.isNotEmpty) {
       try {
         final response = await http.post(
           Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$geminiApiKey'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
-            "contents": [{
-              "parts": [{"text": "Você é o JARVIS, assistente do Homem de Ferro. Responda de forma direta e curta: $pergunta"}]
-            }]
+            "contents": [{"parts": [{"text": "Responda curto: $pergunta"}]}]
           }),
         );
         if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          return data['candidates'][0]['content']['parts'][0]['text'];
+          return jsonDecode(response.body)['candidates'][0]['content']['parts'][0]['text'];
+        } else {
+          logErro += "Gemini HTTP ${response.statusCode}. ";
         }
-      } catch (_) {}
+      } catch (e) {
+        logErro += "Gemini Erro: $e. ";
+      }
     }
 
-    // 2ª Tentativa (Fallback): Groq API (Llama 3)
     if (groqApiKey.isNotEmpty) {
       try {
         final response = await http.post(
@@ -282,20 +283,20 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
           },
           body: jsonEncode({
             "model": "llama-3.3-70b-versatile",
-            "messages": [
-              {"role": "system", "content": "Você é o JARVIS, assistente do Homem de Ferro. Responda de forma direta e curta em português."},
-              {"role": "user", "content": pergunta}
-            ]
+            "messages": [{"role": "user", "content": pergunta}]
           }),
         );
         if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          return data['choices'][0]['message']['content'];
+          return jsonDecode(response.body)['choices'][0]['message']['content'];
+        } else {
+          logErro += "Groq HTTP ${response.statusCode}. ";
         }
-      } catch (_) {}
+      } catch (e) {
+        logErro += "Groq Erro: $e. ";
+      }
     }
 
-    return "Comando recebido, Senhor. Todos os sistemas de voz e áudio estão ativos.";
+    return "ERRO REAL: $logErro";
   }
 
   Future<void> _toggleMicrophone() async {
