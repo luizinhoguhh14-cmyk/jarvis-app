@@ -121,7 +121,7 @@ class JarvisVoiceService {
         final response = await http.post(
           Uri.parse('https://api.fish.audio/v1/tts'),
           headers: {
-            'Authorization': 'Bearer $fishAudioApiKey',
+            'Authorization': 'Bearer ${fishAudioApiKey.trim()}',
             'Content-Type': 'application/json',
           },
           body: jsonEncode({
@@ -257,7 +257,7 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
     if (geminiApiKey.isNotEmpty) {
       try {
         final response = await http.post(
-          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$geminiApiKey'),
+          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey.trim()}'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             "contents": [{"parts": [{"text": "Responda curto: $pergunta"}]}]
@@ -278,11 +278,11 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
         final response = await http.post(
           Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
           headers: {
-            'Authorization': 'Bearer $groqApiKey',
+            'Authorization': 'Bearer ${groqApiKey.trim()}',
             'Content-Type': 'application/json',
           },
           body: jsonEncode({
-            "model": "llama-3.3-70b-versatile",
+            "model": "llama3-8b-8192",
             "messages": [{"role": "user", "content": pergunta}]
           }),
         );
