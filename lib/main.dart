@@ -266,7 +266,7 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
         if (response.statusCode == 200) {
           return jsonDecode(response.body)['candidates'][0]['content']['parts'][0]['text'];
         } else {
-          String bG = response.body.replaceAll("\n", ""); logErro += "Gem ${response.statusCode}: ${bG.length > 25 ? bG.substring(0, 25) : bG}... ";
+          String bG = response.body.replaceAll("\n", ""); logErro += "Gem ${response.statusCode}: ${bG.length > 150 ? bG.substring(0, 150) : bG}... ";
         }
       } catch (e) {
         logErro += "Gemini Erro: $e. ";
@@ -289,7 +289,7 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
         if (response.statusCode == 200) {
           return jsonDecode(response.body)['choices'][0]['message']['content'];
         } else {
-          String bQ = response.body.replaceAll("\n", ""); logErro += "Groq ${response.statusCode}: ${bQ.length > 25 ? bQ.substring(0, 25) : bQ}... ";
+          String bQ = response.body.replaceAll("\n", ""); logErro += "Groq ${response.statusCode}: ${bQ.length > 150 ? bQ.substring(0, 150) : bQ}... ";
         }
       } catch (e) {
         logErro += "Groq Erro: $e. ";
