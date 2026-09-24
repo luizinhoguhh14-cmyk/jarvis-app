@@ -253,49 +253,38 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
 
   Future<String> _obterRespostaIA(String pergunta) async {
     String logErro = "";
-    
     if (geminiApiKey.isNotEmpty) {
       try {
         final response = await http.post(
           Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey.trim()}'),
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            "contents": [{"parts": [{"text": "Responda curto: $pergunta"}]}]
-          }),
+          body: jsonEncode({"contents": [{"parts": [{"text": "Responda curto: $pergunta"}]}]}),
         );
         if (response.statusCode == 200) {
           return jsonDecode(response.body)['candidates'][0]['content']['parts'][0]['text'];
         } else {
-          String bG = response.body.replaceAll("\n", ""); logErro += "Gem ${response.statusCode}: ${bG.length > 150 ? bG.substring(0, 150) : bG}... ";
+          logErro += "Gem ${response.statusCode}: ${response.body.replaceAll('\n', '')} ";
         }
       } catch (e) {
-        logErro += "Gemini Erro: $e. ";
+        logErro += "Gem Erro: $e ";
       }
     }
-
     if (groqApiKey.isNotEmpty) {
       try {
         final response = await http.post(
           Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
-          headers: {
-            'Authorization': 'Bearer ${groqApiKey.trim()}',
-            'Content-Type': 'application/json',
-          },
-          body: jsonEncode({
-            "model": "llama-3.1-8b-instant",
-            "messages": [{"role": "user", "content": pergunta}]
-          }),
+          headers: {'Authorization': 'Bearer ${groqApiKey.trim()}', 'Content-Type': 'application/json'},
+          body: jsonEncode({"model": "llama-3.1-8b-instant", "messages": [{"role": "user", "content": pergunta}]}),
         );
         if (response.statusCode == 200) {
           return jsonDecode(response.body)['choices'][0]['message']['content'];
         } else {
-          String bQ = response.body.replaceAll("\n", ""); logErro += "Groq ${response.statusCode}: ${bQ.length > 150 ? bQ.substring(0, 150) : bQ}... ";
+          logErro += "Groq ${response.statusCode}: ${response.body.replaceAll('\n', '')} ";
         }
       } catch (e) {
-        logErro += "Groq Erro: $e. ";
+        logErro += "Groq Erro: $e ";
       }
     }
-
     return "ERRO REAL: $logErro";
   }
 
