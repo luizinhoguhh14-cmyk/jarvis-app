@@ -274,7 +274,7 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
         final response = await http.post(
           Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
           headers: {'Authorization': 'Bearer ${groqApiKey.trim()}', 'Content-Type': 'application/json'},
-          body: jsonEncode({"model": "llama-3.1-8b-instant", "messages": [{"role": "user", "content": pergunta}]}),
+          body: jsonEncode({"model": "llama3-8b-8192", "messages": [{"role": "user", "content": pergunta}]}),
         );
         if (response.statusCode == 200) {
           return jsonDecode(response.body)['choices'][0]['message']['content'];
