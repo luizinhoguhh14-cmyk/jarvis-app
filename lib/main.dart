@@ -256,7 +256,7 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
     if (geminiApiKey.isNotEmpty) {
       try {
         final response = await http.post(
-          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey.trim()}'),
+          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiApiKey.trim()}'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({"contents": [{"parts": [{"text": "Responda curto: $pergunta"}]}]}),
         );
