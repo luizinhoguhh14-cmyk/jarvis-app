@@ -256,7 +256,7 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
     if (geminiApiKey.isNotEmpty) {
       try {
         final response = await http.post(
-          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiApiKey.trim()}'),
+          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey.trim()}'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({"contents": [{"parts": [{"text": "Responda curto: $pergunta"}]}]}),
         );
@@ -274,7 +274,7 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
         final response = await http.post(
           Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
           headers: {'Authorization': 'Bearer ${groqApiKey.trim()}', 'Content-Type': 'application/json'},
-          body: jsonEncode({"model": "mixtral-8x7b-32768", "messages": [{"role": "user", "content": pergunta}]}),
+          body: jsonEncode({"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": pergunta}]}),
         );
         if (response.statusCode == 200) {
           return jsonDecode(response.body)['choices'][0]['message']['content'];
