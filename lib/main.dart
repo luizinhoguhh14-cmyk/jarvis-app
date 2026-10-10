@@ -1,3 +1,26 @@
+
+Future<String> fetchAvailableModels(String groqKey, String geminiKey) async {
+  String report = "--- RADAR DE MODELOS ---\n";
+  try {
+    if (groqKey.isNotEmpty) {
+      final res = await http.get(
+        Uri.parse('https://api.groq.com/openai/v1/models'),
+        headers: {'Authorization': 'Bearer ${groqKey.trim()}'},
+      );
+      report += "Groq: ${res.statusCode} -> ${res.body}\n";
+    }
+    if (geminiKey.isNotEmpty) {
+      final res = await http.get(
+        Uri.parse('https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey.trim()}'),
+      );
+      report += "Gemini: ${res.statusCode} -> ${res.body}\n";
+    }
+  } catch (e) {
+    report += "Erro no Radar: $e";
+  }
+  return report;
+}
+
 import 'dart:convert';
 
 
