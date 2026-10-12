@@ -1,3 +1,14 @@
+import 'dart:convert';
+
+
+import 'dart:math';
+import 'dart:typed_data';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:audioplayers/audioplayers.dart';
 
 Future<String> fetchAvailableModels(String groqKey, String geminiKey) async {
   String report = "--- RADAR DE MODELOS ---\n";
@@ -21,17 +32,6 @@ Future<String> fetchAvailableModels(String groqKey, String geminiKey) async {
   return report;
 }
 
-import 'dart:convert';
-
-
-import 'dart:math';
-import 'dart:typed_data';
-import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:permission_handler/permission_handler.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:audioplayers/audioplayers.dart';
 
 
 // --- DIRETRIZES DE PERSONALIDADE J.A.R.V.I.S. ---
