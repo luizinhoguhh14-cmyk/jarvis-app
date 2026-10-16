@@ -15,16 +15,14 @@ Future<String> fetchAvailableModels(String groqKey, String geminiKey) async {
   try {
     if (groqKey.isNotEmpty) {
       final res = await http.get(
-        Uri.parse('https://api.groq.com/openai/v1/models'),
+        Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent'),
         headers: {'Authorization': 'Bearer ${groqKey.trim()}'},
       );
       report += "Groq: ${res.statusCode} -> ${res.body}\n";
     }
     if (geminiKey.isNotEmpty) {
       final res = await http.get(
-        Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent', "Gemini: ${res.statusCode} -> ${res.body}\n";
-    }
-  } catch (e) {
+        Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent') {
     report += "Erro no Radar: $e";
   }
   return report;
@@ -152,7 +150,7 @@ class JarvisVoiceService {
     if (fishAudioApiKey.isNotEmpty) {
       try {
         final response = await http.post(
-          Uri.parse('https://api.fish.audio/v1/tts'),
+          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent'),
           headers: {
             'Authorization': 'Bearer ${fishAudioApiKey.trim()}',
             'Content-Type': 'application/json',
@@ -289,7 +287,7 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
     if (geminiApiKey.isNotEmpty) {
       try {
         final response = await http.post(
-          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"contents": [{"parts": [{"text": "Responda curto: $pergunta"}]}]}),
+          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent'),
         );
         if (response.statusCode == 200) {
           return jsonDecode(response.body)['candidates'][0]['content']['parts'][0]['text'];
@@ -303,7 +301,7 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
     if (groqApiKey.isNotEmpty) {
       try {
         final response = await http.post(
-          Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
+          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent'),
           headers: {'Authorization': 'Bearer ${groqApiKey.trim()}', 'Content-Type': 'application/json'},
           body: jsonEncode({"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": pergunta}]}),
         );
