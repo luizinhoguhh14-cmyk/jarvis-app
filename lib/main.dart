@@ -22,7 +22,7 @@ Future<String> fetchAvailableModels(String groqKey, String geminiKey) async {
     }
     if (geminiKey.isNotEmpty) {
       final res = await http.get(
-        Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"Gemini: ${res.statusCode} -> ${res.body}\n";
+        Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent', "Gemini: ${res.statusCode} -> ${res.body}\n";
     }
   } catch (e) {
     report += "Erro no Radar: $e";
