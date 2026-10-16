@@ -22,9 +22,7 @@ Future<String> fetchAvailableModels(String groqKey, String geminiKey) async {
     }
     if (geminiKey.isNotEmpty) {
       final res = await http.get(
-        Uri.parse('https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey.trim()}'),
-      );
-      report += "Gemini: ${res.statusCode} -> ${res.body}\n";
+        Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"Gemini: ${res.statusCode} -> ${res.body}\n";
     }
   } catch (e) {
     report += "Erro no Radar: $e";
@@ -291,9 +289,7 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
     if (geminiApiKey.isNotEmpty) {
       try {
         final response = await http.post(
-          Uri.parse('https://generativelanguage.googleapis.com/v1/models/gemini-3.8-flash:generateContent?key=${geminiApiKey.trim()}'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({"contents": [{"parts": [{"text": "Responda curto: $pergunta"}]}]}),
+          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"contents": [{"parts": [{"text": "Responda curto: $pergunta"}]}]}),
         );
         if (response.statusCode == 200) {
           return jsonDecode(response.body)['candidates'][0]['content']['parts'][0]['text'];
@@ -309,7 +305,7 @@ class _JarvisVoiceTabState extends State<JarvisVoiceTab> with SingleTickerProvid
         final response = await http.post(
           Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
           headers: {'Authorization': 'Bearer ${groqApiKey.trim()}', 'Content-Type': 'application/json'},
-          body: jsonEncode({"model": "llama-3.1-8b-instant", "messages": [{"role": "user", "content": pergunta}]}),
+          body: jsonEncode({"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": pergunta}]}),
         );
         if (response.statusCode == 200) {
           return jsonDecode(response.body)['choices'][0]['message']['content'];
